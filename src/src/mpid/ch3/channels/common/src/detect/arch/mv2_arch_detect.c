@@ -12,7 +12,9 @@
 
 #include <stdio.h>
 #include <string.h>
+#if defined(HAVE_LIBIBVERBS)
 #include <infiniband/verbs.h>
+#endif
 
 #include <mpichconf.h>
 
@@ -20,6 +22,7 @@
 #include <dirent.h>
 
 #include "mv2_arch_hca_detect.h"
+#include "debug_utils.h"
 
 #if defined(_SMP_LIMIC_)
 #define SOCKETS 32
@@ -56,6 +59,7 @@ static mv2_cpu_family_type g_mv2_cpu_family_type = MV2_CPU_FAMILY_NONE;
 #define INTEL_XEON_E5_2680_V3_MODEL 63
 #define INTEL_XEON_E5_2695_V3_MODEL 63
 #define INTEL_XEON_E5_2670_V3_MODEL 64
+#define INTEL_XEON_E5_2680_V4_MODEL 79
 
 #define MV2_STR_VENDOR_ID    "vendor_id"
 #define MV2_STR_AUTH_AMD     "AuthenticAMD"
@@ -75,9 +79,12 @@ static mv2_cpu_family_type g_mv2_cpu_family_type = MV2_CPU_FAMILY_NONE;
 #define INTEL_E5_2698_V3_MODEL_NAME "Intel(R) Xeon(R) CPU E5-2698 v3 @ 2.30GHz"
 #define INTEL_E5_2660_V3_MODEL_NAME "Intel(R) Xeon(R) CPU E5-2660 v3 @ 2.60GHz"
 #define INTEL_E5_2680_V3_MODEL_NAME "Intel(R) Xeon(R) CPU E5-2680 v3 @ 2.50GHz"
+#define INTEL_E5_2680_V4_MODEL_NAME "Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz"
 #define INTEL_E5_2687W_V3_MODEL_NAME "Intel(R) Xeon(R) CPU E5-2687W v3 @ 3.10GHz"
 #define INTEL_E5_2670_V3_MODEL_NAME "Intel(R) Xeon(R) CPU E5-2670 v3 @ 2.30GHz"
 #define INTEL_E5_2695_V3_MODEL_NAME "Intel(R) Xeon(R) CPU E5-2695 v3 @ 2.30GHz"
+#define INTEL_E5_2695_V4_MODEL_NAME "Intel(R) Xeon(R) CPU E5-2695 v4 @ 2.10GHz"
+#define INTEL_XEON_PHI_7250_MODEL_NAME "Intel(R) Xeon Phi(TM) CPU 7250 @ 1.40GHz"
 
 typedef struct _mv2_arch_types_log_t{
     uint64_t arch_type;
@@ -109,6 +116,9 @@ static mv2_arch_types_log_t mv2_arch_types_log[] =
     {MV2_ARCH_INTEL_XEON_E5_2687W_V3_2S_20,"MV2_ARCH_INTEL_XEON_E5_2687W_V3_2S_20"},
     {MV2_ARCH_INTEL_XEON_E5_2670_V3_2S_24,"MV2_ARCH_INTEL_XEON_E5_2670_V3_2S_24"},
     {MV2_ARCH_INTEL_XEON_E5_2695_V3_2S_28,"MV2_ARCH_INTEL_XEON_E5_2695_V3_2S_28"},
+    {MV2_ARCH_INTEL_XEON_E5_2695_V4_2S_36,"MV2_ARCH_INTEL_XEON_E5_2695_V4_2S_36"},
+    {MV2_ARCH_INTEL_XEON_E5_2680_V4_2S_28,"MV2_ARCH_INTEL_XEON_E5_2680_V4_2S_28"},
+    {MV2_ARCH_INTEL_XEON_PHI_7250,  "MV2_ARCH_INTEL_XEON_PHI_7250"},
 
     /* AMD Architectures */
     {MV2_ARCH_AMD_GENERIC,          "MV2_ARCH_AMD_GENERIC"},
@@ -260,7 +270,7 @@ mv2_arch_type mv2_get_arch_type()
                         continue;
                     }
                 }
-           
+
                 if (!model_name_set){
                     if (strncmp(key, MV2_STR_MODEL_NAME, strlen(MV2_STR_MODEL_NAME)) == 0) {
                         strtok(NULL, MV2_STR_WS);
@@ -275,7 +285,13 @@ mv2_arch_type mv2_get_arch_type()
             if( MV2_CPU_FAMILY_INTEL == g_mv2_cpu_family_type ) {
                 arch_type = MV2_ARCH_INTEL_GENERIC;
 
-                if(2 == num_sockets ) {
+                if (1 == num_sockets) {
+                    if (68 == num_cpus) {
+                        if (NULL != strstr(model_name, INTEL_XEON_PHI_7250_MODEL_NAME)) {
+                            arch_type = MV2_ARCH_INTEL_XEON_PHI_7250;
+                        }
+                    }
+                } else if(2 == num_sockets) {
 
                     if(4 == num_cpus) {
                         arch_type = MV2_ARCH_INTEL_XEON_DUAL_4;
@@ -290,7 +306,7 @@ mv2_arch_type mv2_get_arch_type()
 
                         } else if(NEHALEM_MODEL == g_mv2_cpu_model) {
                             arch_type = MV2_ARCH_INTEL_NEHALEM_8;
-                        
+
                         } else if(INTEL_E5630_MODEL == g_mv2_cpu_model){
                             arch_type = MV2_ARCH_INTEL_XEON_E5630_8;
                         } 
@@ -308,8 +324,8 @@ mv2_arch_type mv2_get_arch_type()
 
                         if(NEHALEM_MODEL == g_mv2_cpu_model) {  /* nehalem with smt on */
                             arch_type = MV2_ARCH_INTEL_NEHALEM_16;
-                        
-			            }else if(INTEL_E5_2670_MODEL == g_mv2_cpu_model) {
+
+                        }else if(INTEL_E5_2670_MODEL == g_mv2_cpu_model) {
                             if(strncmp(model_name, INTEL_E5_2670_MODEL_NAME, 
                                         strlen(INTEL_E5_2670_MODEL_NAME)) == 0){
                                 arch_type = MV2_ARCH_INTEL_XEON_E5_2670_16;
@@ -322,42 +338,49 @@ mv2_arch_type mv2_get_arch_type()
                                 arch_type = MV2_ARCH_INTEL_GENERIC;
                             }
                         }
-				    } else if(20 == num_cpus){
-				        if(INTEL_XEON_E5_2670_V2_MODEL == g_mv2_cpu_model) {
-		                    if(NULL != strstr(model_name, INTEL_E5_2670_V2_MODEL_NAME)){
-		                        arch_type = MV2_ARCH_INTEL_XEON_E5_2670_V2_2S_20;
-		                    }else if(NULL != strstr(model_name, INTEL_E5_2680_V2_MODEL_NAME)){
-		                        arch_type = MV2_ARCH_INTEL_XEON_E5_2680_V2_2S_20;
-		                    }else if(NULL != strstr(model_name, INTEL_E5_2690_V2_MODEL_NAME)){
-		                        arch_type = MV2_ARCH_INTEL_XEON_E5_2690_V2_2S_20;
-		                    }
-		                } else if(NULL != strstr(model_name, INTEL_E5_2687W_V3_MODEL_NAME)){
-		                    arch_type = MV2_ARCH_INTEL_XEON_E5_2687W_V3_2S_20;
-					    } else if (INTEL_XEON_E5_2660_V3_MODEL == g_mv2_cpu_model) {
-		                    if(NULL != strstr(model_name, INTEL_E5_2660_V3_MODEL_NAME)) {
-		                        arch_type = MV2_ARCH_INTEL_XEON_E5_2660_V3_2S_20;
+                    } else if(20 == num_cpus){
+                        if(INTEL_XEON_E5_2670_V2_MODEL == g_mv2_cpu_model) {
+                            if(NULL != strstr(model_name, INTEL_E5_2670_V2_MODEL_NAME)){
+                                arch_type = MV2_ARCH_INTEL_XEON_E5_2670_V2_2S_20;
+                            }else if(NULL != strstr(model_name, INTEL_E5_2680_V2_MODEL_NAME)){
+                                arch_type = MV2_ARCH_INTEL_XEON_E5_2680_V2_2S_20;
+                            }else if(NULL != strstr(model_name, INTEL_E5_2690_V2_MODEL_NAME)){
+                                arch_type = MV2_ARCH_INTEL_XEON_E5_2690_V2_2S_20;
+                            }
+                        } else if(NULL != strstr(model_name, INTEL_E5_2687W_V3_MODEL_NAME)){
+                            arch_type = MV2_ARCH_INTEL_XEON_E5_2687W_V3_2S_20;
+                        } else if (INTEL_XEON_E5_2660_V3_MODEL == g_mv2_cpu_model) {
+                            if(NULL != strstr(model_name, INTEL_E5_2660_V3_MODEL_NAME)) {
+                                arch_type = MV2_ARCH_INTEL_XEON_E5_2660_V3_2S_20;
                             }
                         }
-                                   } else if(24 == num_cpus){
-                                        if(NULL != strstr(model_name, INTEL_E5_2680_V3_MODEL_NAME)) {
-                                            arch_type = MV2_ARCH_INTEL_XEON_E5_2680_V3_2S_24;
-                                        } else if(NULL != strstr(model_name, INTEL_E5_2690_V3_MODEL_NAME)){
-                                            arch_type = MV2_ARCH_INTEL_XEON_E5_2690_V3_2S_24;
-                                        } else if(NULL != strstr(model_name, INTEL_E5_2670_V3_MODEL_NAME)){
-                                            arch_type = MV2_ARCH_INTEL_XEON_E5_2670_V3_2S_24;
-                                        }
+                    } else if(24 == num_cpus){
+                        if(NULL != strstr(model_name, INTEL_E5_2680_V3_MODEL_NAME)) {
+                            arch_type = MV2_ARCH_INTEL_XEON_E5_2680_V3_2S_24;
+                        } else if(NULL != strstr(model_name, INTEL_E5_2690_V3_MODEL_NAME)){
+                            arch_type = MV2_ARCH_INTEL_XEON_E5_2690_V3_2S_24;
+                        } else if(NULL != strstr(model_name, INTEL_E5_2670_V3_MODEL_NAME)){
+                            arch_type = MV2_ARCH_INTEL_XEON_E5_2670_V3_2S_24;
+                        }
                     } else if(28 == num_cpus){
                         if(NULL != strstr(model_name, INTEL_E5_2695_V3_MODEL_NAME)) {
                             arch_type = MV2_ARCH_INTEL_XEON_E5_2695_V3_2S_28;
+                        } else if(NULL != strstr(model_name, INTEL_E5_2680_V4_MODEL_NAME)) {
+                            arch_type = MV2_ARCH_INTEL_XEON_E5_2680_V4_2S_28;
                         }
-				    } else if(32 == num_cpus){
-				        if(INTEL_XEON_E5_2698_V3_MODEL == g_mv2_cpu_model) {
-		                    if(NULL != strstr(model_name, INTEL_E5_2698_V3_MODEL_NAME)) {
-		                        arch_type = MV2_ARCH_INTEL_XEON_E5_2698_V3_2S_32;
+                    } else if(32 == num_cpus){
+                        if(INTEL_XEON_E5_2698_V3_MODEL == g_mv2_cpu_model) {
+                            if(NULL != strstr(model_name, INTEL_E5_2698_V3_MODEL_NAME)) {
+                                arch_type = MV2_ARCH_INTEL_XEON_E5_2698_V3_2S_32;
                             }
                         }
-				    }
-		        }
+                    }  else if(36 == num_cpus || 72 == num_cpus){
+                        if(NULL != strstr(model_name, INTEL_E5_2695_V4_MODEL_NAME)) {
+                            arch_type = MV2_ARCH_INTEL_XEON_E5_2695_V4_2S_36;
+                        }
+                    }
+
+                }
 
             } else if(MV2_CPU_FAMILY_AMD == g_mv2_cpu_family_type) {
                 arch_type = MV2_ARCH_AMD_GENERIC;
@@ -376,7 +399,7 @@ mv2_arch_type mv2_get_arch_type()
                         arch_type =  MV2_ARCH_AMD_BARCELONA_16;
                     } else if(32 == num_cpus) {
                         arch_type =  MV2_ARCH_AMD_OPTERON_6136_32;
-		            } else if(64 == num_cpus) {
+                    } else if(64 == num_cpus) {
                         arch_type =  MV2_ARCH_AMD_OPTERON_6276_64;
                     }
                 }
@@ -476,8 +499,9 @@ void hwlocSocketDetection(int print_details)
     
     depth = hwloc_get_type_depth(topology, HWLOC_OBJ_SOCKET);
     no_sockets=hwloc_get_nbobjs_by_depth(topology, depth);
-    if(print_details)
-        printf("Total number of sockets=%d\n", no_sockets);
+    
+    PRINT_DEBUG(DEBUG_SHM_verbose>0, "Total number of sockets=%d\n", no_sockets);
+
     for(i=0;i<no_sockets;i++)
     {   
         sockets = hwloc_get_obj_by_type(topology, HWLOC_OBJ_SOCKET, i); 
@@ -515,19 +539,15 @@ void hwlocSocketDetection(int print_details)
             core_cnt[0] = (core_cnt[0] >> 1); 
         } 
         
-        if(print_details)
-        {
+        if (DEBUG_SHM_verbose>0) {
             printf("Socket %d, num of cores / socket=%d\n", i, (numcores_persocket[i]));
             printf("core id\n");
+
+            for (j=0;j<CORES_REP_AS_BITS;j++) {
+                printf("%d\t", node[i][j]);
+            }
+            printf("\n");
         }
-        
-        for(j=0;j<CORES_REP_AS_BITS;j++)
-        {                 
-            if(print_details)
-                printf("%d\t", node[i][j]); 
-        }         
-        if(print_details)
-             printf("\n");
     }   
     free(str);
 
@@ -555,7 +575,7 @@ int getProcessBinding(pid_t pid)
     cpubind_set = hwloc_bitmap_alloc();
     res = hwloc_get_proc_cpubind(topology, pid, cpubind_set, 0);
     if(-1 == res)
-        printf("getProcessBinding(): Error in getting cpubinding of process");
+        fprintf(stderr, "getProcessBinding(): Error in getting cpubinding of process");
 
     hwloc_bitmap_asprintf(&str, cpubind_set);
     
@@ -577,11 +597,11 @@ int getProcessBinding(pid_t pid)
     if(more32bit)
     {   
         /*tells multiple of 32 bits(eg if 0, then 64 bits)*/
-        printf("more bits set\n");
+        PRINT_DEBUG(DEBUG_SHM_verbose>0, "more bits set\n");
         core_bind[1] = strtol (pEnd,NULL,0);
-        printf("core_bind[1]=%x\n", core_bind[1]);
+        PRINT_DEBUG(DEBUG_SHM_verbose>0, "core_bind[1]=%x\n", core_bind[1]);
         offset = (core_bind[1] + 1)*CORES_REP_AS_BITS;
-        printf("Offset=%d\n", offset);
+        PRINT_DEBUG(DEBUG_SHM_verbose>0, "Offset=%d\n", offset);
     }   
 
     for(j=0;j<CORES_REP_AS_BITS;j++)
@@ -606,7 +626,7 @@ int getProcessBinding(pid_t pid)
             return i; /*index of socket where the process is bound*/
         }
     }   
-    printf("Error: Process not bound on any core ??\n");
+    fprintf(stderr, "Error: Process not bound on any core ??\n");
     free(str);
     hwloc_bitmap_free(cpubind_set);
     hwloc_topology_destroy(topology);

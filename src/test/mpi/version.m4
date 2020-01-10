@@ -15,10 +15,10 @@
 # playing with autotools-fire.
 
 m4_define([MPICH_VERSION_m4],[3.1.4])dnl
-m4_define([MPICH_RELEASE_DATE_m4],[Tue Mar 29 20:54:20 EDT 2016])dnl
+m4_define([MPICH_RELEASE_DATE_m4],[Wed Sep  7 14:33:43 EDT 2016])dnl
 
-m4_define([MVAPICH2_VERSION_m4],[2.2rc1])dnl
-m4_define([MVAPICH2_RELEASE_DATE_m4],[Tue Mar 29 22:00:00 EST 2016])dnl
+m4_define([MVAPICH2_VERSION_m4],[2.2])dnl
+m4_define([MVAPICH2_RELEASE_DATE_m4],[Thu Sep 08 22:00:00 EST 2016])dnl
 
 # For libtool ABI versioning rules see:
 # http://www.gnu.org/software/libtool/manual/libtool.html#Updating-version-info

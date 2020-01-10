@@ -204,6 +204,9 @@
 /* Define to 1 if you have the `usleep' function. */
 #undef HAVE_USLEEP
 
+/* Define to 1 if the system has the type `u_int64_t'. */
+#undef HAVE_U_INT64_T
+
 /* Attribute style weak pragma */
 #undef HAVE_WEAK_ATTRIBUTE
 
@@ -439,6 +442,9 @@
 
 /* Define to "unsigned int" if sys/types.h does not define. */
 #undef u_int
+
+/* Define missing 64 bit type */
+#undef u_int64_t
 
 /* Define to "unsigned long" if sys/types.h does not define. */
 #undef u_long

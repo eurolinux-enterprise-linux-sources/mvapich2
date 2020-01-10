@@ -2464,30 +2464,49 @@ int MPIDI_CH3I_CM_Connect_self(MPIDI_VC_t * vc)
     cm_msg msg;
 
     /*TODO: XRC and CHECKPOINT cases yet to be handled*/
-
-    /*create qp*/
-    cm_qp_create(vc, 1, MV2_QPT_RC);
-
-    /*move to rtr*/
-    for (i = 0; i < vc->mrail.num_rails; ++i) {
-        msg.lids[i] = vc->mrail.rails[i].lid;
-        if (use_iboeth) {
-            MPIU_Memcpy(&msg.gids[i], &vc->mrail.rails[i].gid,
-                        sizeof(union ibv_gid));
+#if defined(RDMA_CM)
+    /* Trap into the RDMA_CM connection initiation */
+    if (mv2_MPIDI_CH3I_RDMA_Process.use_rdma_cm) {
+        int j;
+        int rail_index;
+        int max_num_ips = rdma_num_hcas * rdma_num_ports;
+        vc->ch.state = MPIDI_CH3I_VC_STATE_CONNECTING_CLI;
+        for (i = 0; i < rdma_num_hcas * rdma_num_ports; ++i) {
+            for (j = 0; j < rdma_num_qp_per_port; ++j) {
+                rail_index = i * rdma_num_qp_per_port + j;
+                rdma_cm_connect_to_server(vc,
+                                          rdma_cm_host_list[vc->pg_rank *
+                                                            max_num_ips + i],
+                                          rail_index);
+            }
         }
-        msg.qpns[i] = vc->mrail.rails[i].qp_hndl->qp_num;
+    } else
+#endif /* defined(RDMA_CM) */
+    {
+        /*create qp*/
+        cm_qp_create(vc, 1, MV2_QPT_XRC);
+
+        /*move to rtr*/
+        for (i = 0; i < vc->mrail.num_rails; ++i) {
+            msg.lids[i] = vc->mrail.rails[i].lid;
+            if (use_iboeth) {
+                MPIU_Memcpy(&msg.gids[i], &vc->mrail.rails[i].gid,
+                        sizeof(union ibv_gid));
+            }
+            msg.qpns[i] = vc->mrail.rails[i].qp_hndl->qp_num;
+        }
+        cm_qp_move_to_rtr (vc, msg.lids, msg.gids, msg.qpns, 0, NULL, 0);
+
+        /*initialize vc and prepost buffers*/
+        MRAILI_Init_vc(vc);
+
+        /*move to rts*/
+        cm_qp_move_to_rts(vc);
+
+        /*set vc to idle and active*/
+        vc->ch.state = MPIDI_CH3I_VC_STATE_IDLE;
+        VC_SET_ACTIVE(vc);
     }
-    cm_qp_move_to_rtr (vc, msg.lids, msg.gids, msg.qpns, 0, NULL, 0);
-
-    /*initialize vc and prepost buffers*/
-    MRAILI_Init_vc(vc);
-
-    /*move to rts*/
-    cm_qp_move_to_rts(vc);
-
-    /*set vc to idle and active*/
-    vc->ch.state = MPIDI_CH3I_VC_STATE_IDLE;
-    VC_SET_ACTIVE(vc);
 
     return MPI_SUCCESS;
 }
@@ -2914,17 +2933,21 @@ int cm_send_suspend_msg(MPIDI_VC_t * vc)
                                 sizeof(MPIDI_CH3I_MRAILI_Pkt_comm_header),
                                 &sreq);
         vc->ch.state = MPIDI_CH3I_VC_STATE_SUSPENDING;
+        /* Disable fast send */
+        vc->eager_fast_fn = NULL;
         vc->ch.rput_stop = 1;
 
-        if (!sreq)      // if sreq == NULL, the msg has been sent out
-            vc->mrail.suspended_rails_send++;
+        MPIU_Assert(NULL == sreq);
+        /* sreq should be NULL because the msg has been sent out */
+        vc->mrail.suspended_rails_send++;
+
         if (vc->mrail.suspended_rails_send > 0 &&
             vc->mrail.suspended_rails_recv > 0) {
             vc->ch.state = MPIDI_CH3I_VC_STATE_SUSPENDED;
             vc->mrail.suspended_rails_send = 0;
             vc->mrail.suspended_rails_recv = 0;
             PRINT_DEBUG(DEBUG_CM_verbose > 0,
-                        "%s [%d <= %d]: turn to SUSPENDED\n", __func__,
+                        "Suspend channel from %d to %d\n",
                         MPIDI_Process.my_pg_rank, vc->pg_rank);
         }
 
@@ -2956,18 +2979,22 @@ int cm_send_reactivate_msg(MPIDI_VC_t * vc)
     int i = 0;
 
     /* Use the SMP channel to send Reactivate message for SMP VCs */
-    MPID_Request *sreq;
+    MPID_Request *sreq = NULL;
     MPIDI_CH3I_MRAILI_Pkt_comm_header *p;
     extern int MPIDI_CH3_SMP_iStartMsg(MPIDI_VC_t *, void *, MPIDI_msg_sz_t,
                                        MPID_Request **);
     if (SMP_INIT && (vc->smp.local_nodes >= 0)) {
+        PRINT_DEBUG(DEBUG_CM_verbose > 0, "Sending CM_MSG_TYPE_REACTIVATE_REQ to rank %d\n", vc->pg_rank);
         p = (MPIDI_CH3I_MRAILI_Pkt_comm_header *)
             MPIU_Malloc(sizeof(MPIDI_CH3I_MRAILI_Pkt_comm_header));
         p->type = MPIDI_CH3_PKT_CM_REACTIVATION_DONE;
         MPIDI_CH3_SMP_iStartMsg(vc, p,
                                 sizeof(MPIDI_CH3I_MRAILI_Pkt_comm_header),
                                 &sreq);
-        vc->ch.state = MPIDI_CH3I_VC_STATE_IDLE;
+
+        MPIU_Assert(NULL == sreq);
+        /* sreq should be NULL because the msg has been sent out */
+        vc->mrail.reactivation_done_send = 1;
 
         MPIU_Free(p);
         return (MPI_SUCCESS);
@@ -3045,9 +3072,11 @@ int MPIDI_CH3I_CM_Suspend(MPIDI_VC_t ** vc_vector)
             vc = vc_vector[i];
             pthread_mutex_lock(&cm_automic_op_lock);
             if (vc->ch.state == MPIDI_CH3I_VC_STATE_IDLE) {
+                PRINT_DEBUG(DEBUG_CR_verbose > 2, "Sending cm_send_suspend_msg to %d\n", vc->pg_rank);
                 cm_send_suspend_msg(vc);
             } else if (vc->ch.state != MPIDI_CH3I_VC_STATE_SUSPENDING
-                       && vc->ch.state != MPIDI_CH3I_VC_STATE_SUSPENDED) {
+                       && vc->ch.state != MPIDI_CH3I_VC_STATE_SUSPENDED
+                       && vc->ch.state != MPIDI_CH3I_VC_STATE_CONNECTING_SRV) {
                 CM_ERR_ABORT("Wrong state when suspending %d\n", vc->ch.state);
             }
 
@@ -3157,6 +3186,10 @@ int MPIDI_CH3I_CM_Reactivate(MPIDI_VC_t ** vc_vector)
                 /* Handle the reactivation of the SMP channel */
                 if (SMP_INIT && (vc->smp.local_nodes >= 0)) {
                     pthread_mutex_lock(&cm_automic_op_lock);
+                    if (vc->mrail.reactivation_done_send &&
+                        vc->mrail.reactivation_done_recv) {
+                        vc->ch.state = MPIDI_CH3I_VC_STATE_IDLE;
+                    }
                     if (vc->ch.state != MPIDI_CH3I_VC_STATE_IDLE) {
                         pthread_mutex_unlock(&cm_automic_op_lock);
                         flag = 1;

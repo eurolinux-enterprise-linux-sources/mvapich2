@@ -833,7 +833,7 @@ int MPIR_Allreduce_pt2pt_old_MV2(const void *sendbuf,
         /* heterogeneous. To get the same result on all processes, we
            do a reduce to 0 and then broadcast. */
         mpi_errno = MPIR_Reduce_MV2(sendbuf, recvbuf, count, datatype,
-                                    op, 0, comm, errflag);
+                                    op, 0, comm_ptr, errflag);
         /* 
            FIXME: mpi_errno is error CODE, not necessarily the error
            class MPI_ERR_OP.  In MPICH2, we can get the error class 
@@ -1290,10 +1290,6 @@ int MPIR_Allreduce_reduce_shmem_MV2(const void *sendbuf,
     local_size = shmem_commptr->local_size;
     shmem_comm_rank = shmem_commptr->dev.ch.shmem_comm_rank;
 
-#if defined(CKPT)
-    MPIDI_CH3I_CR_lock();
-#endif
-
     /* Doing the shared memory gather and reduction by the leader */
     if (local_rank == 0) {
         /* Message size is smaller than the shmem_reduce threshold. 
@@ -1343,10 +1339,6 @@ int MPIR_Allreduce_reduce_shmem_MV2(const void *sendbuf,
                                                     shmem_comm_rank);
     }
 
-#if defined(CKPT)
-    MPIDI_CH3I_CR_unlock();
-#endif
-
   fn_exit:
     return (mpi_errno);
 
@@ -1380,10 +1372,6 @@ int MPIR_Allreduce_reduce_p2p_MV2(const void *sendbuf,
     MPID_Comm_get_ptr(shmem_comm, shmem_commptr);
     local_rank = shmem_commptr->rank;
     local_size = shmem_commptr->local_size;
-
-#if defined(CKPT)
-    MPIDI_CH3I_CR_lock();
-#endif
 
     /* Doing the shared memory gather and reduction by the leader */
     if (local_rank == 0) {
@@ -1422,10 +1410,6 @@ int MPIR_Allreduce_reduce_p2p_MV2(const void *sendbuf,
             MPIU_ERR_ADD(mpi_errno_ret, mpi_errno);
         }
     }
-
-#if defined(CKPT)
-    MPIDI_CH3I_CR_unlock();
-#endif
 
     return (mpi_errno);
 }
@@ -1470,9 +1454,6 @@ int MPIR_Allreduce_two_level_MV2(const void *sendbuf,
                                 "**fail");
         }
     }
-#if defined(CKPT)
-    MPIDI_CH3I_CR_lock();
-#endif
 
     /* Doing the shared memory gather and reduction by the leader */
     if (local_rank == 0) {
@@ -1543,10 +1524,6 @@ int MPIR_Allreduce_two_level_MV2(const void *sendbuf,
         MPIU_ERR_SET(mpi_errno, MPI_ERR_OTHER, "**fail");
         MPIU_ERR_ADD(mpi_errno_ret, mpi_errno);
     }
-
-#if defined(CKPT)
-    MPIDI_CH3I_CR_unlock();
-#endif
 
   fn_exit:
     return (mpi_errno);
@@ -1634,9 +1611,6 @@ int MPIR_Allreduce_shmem_MV2(const void *sendbuf,
                                 "**fail");
         }
     }
-#if defined(CKPT)
-    MPIDI_CH3I_CR_lock();
-#endif
 
     /* Doing the shared memory gather and reduction by the leader */
     if (local_rank == 0) {
@@ -1748,9 +1722,6 @@ int MPIR_Allreduce_shmem_MV2(const void *sendbuf,
             MPIU_ERR_ADD(mpi_errno_ret, mpi_errno);
         }
     }
-#if defined(CKPT)
-    MPIDI_CH3I_CR_unlock();
-#endif
 
   fn_exit:
     return (mpi_errno);
@@ -2011,7 +1982,7 @@ int MPIR_Allreduce_new_MV2(const void *sendbuf,
         /* heterogeneous. To get the same result on all processes, we
            do a reduce to 0 and then broadcast. */
         mpi_errno = MPIR_Reduce_MV2(sendbuf, recvbuf, count, datatype,
-                                    op, 0, comm, errflag);
+                                    op, 0, comm_ptr, errflag);
         /* 
            FIXME: mpi_errno is error CODE, not necessarily the error
            class MPI_ERR_OP.  In MPICH2, we can get the error class 
@@ -2309,7 +2280,7 @@ int MPIR_Allreduce_index_tuned_intra_MV2(const void *sendbuf,
         /* heterogeneous. To get the same result on all processes, we
            do a reduce to 0 and then broadcast. */
         mpi_errno = MPIR_Reduce_MV2(sendbuf, recvbuf, count, datatype,
-                                    op, 0, comm, errflag);
+                                    op, 0, comm_ptr, errflag);
         /* 
            FIXME: mpi_errno is error CODE, not necessarily the error
            class MPI_ERR_OP.  In MPICH2, we can get the error class 

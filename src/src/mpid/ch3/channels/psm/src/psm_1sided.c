@@ -35,7 +35,7 @@ psm_prepost_list_t *psm_prepost_list_head = NULL;
 static void psm_1sided_recv(MPID_Request *req, void *ptr);
 static void *psm_gen_packbuf(MPID_Request *rreq, MPID_Request *dtreq);
 static void psm_init_tag();
-static MPID_Request *psm_1sc_putacc_rndvrecv(MPID_Request *, int, MPID_Request **, 
+static MPID_Request *psm_1sc_putacc_rndvrecv(MPID_Request *, MPIDI_msg_sz_t, MPID_Request **,
                                       void *, int, int, int, MPIDI_VC_t *);
 static MPIDI_CH3_PktHandler_Fcn *psm_pkthndl[MPIDI_CH3_PKT_END_CH3+1];
 
@@ -253,6 +253,7 @@ int psm_1sided_putpkt(MPIDI_CH3_Pkt_put_t *pkt, MPID_IOV *iov, int iov_n,
     int rank, i;
     MPIDI_msg_sz_t buflen = 0, len;
     MPID_Request *req;
+    int inuse = 0;
 
     req = psm_create_req();
     req->kind = MPID_REQUEST_SEND;
@@ -287,6 +288,9 @@ int psm_1sided_putpkt(MPIDI_CH3_Pkt_put_t *pkt, MPID_IOV *iov, int iov_n,
         pkt->rndv_len = iov[iov_n-1].MPID_IOV_LEN;
         buflen = 0;
         
+        /* decrease header req's ref_count, since CH3 only checks the rndv one.*/
+        MPIU_Object_release_ref(req, &inuse);
+
         /* last iov is the packet */
         for(i = 0; i < (iov_n-1); i++) {
             iovp = (void *)iov[i].MPID_IOV_BUF;
@@ -316,6 +320,7 @@ int psm_1sided_accumpkt(MPIDI_CH3_Pkt_accum_t *pkt, MPID_IOV *iov, int iov_n,
     int mpi_errno = MPI_SUCCESS;
     MPIDI_msg_sz_t buflen = 0, len;
     MPID_Request *req;
+    int inuse = 0;
 
     req = psm_create_req();
     req->kind = MPID_REQUEST_SEND;
@@ -349,6 +354,9 @@ int psm_1sided_accumpkt(MPIDI_CH3_Pkt_accum_t *pkt, MPID_IOV *iov, int iov_n,
         pkt->rndv_len = iov[iov_n-1].MPID_IOV_LEN;
         buflen = 0;
         
+        /* decrease header req's ref_count, since CH3 only checks the rndv one.*/
+        MPIU_Object_release_ref(req, &inuse);
+
         /* last iov is the packet */
         for(i = 0; i < (iov_n-1); i++) {
             iovp = (void *)iov[i].MPID_IOV_BUF;
@@ -381,6 +389,7 @@ int psm_1sided_getaccumpkt(MPIDI_CH3_Pkt_accum_t *pkt, MPID_IOV *iov, int iov_n,
         uint64_t rtag, rtagsel;
     #endif
     PSM_ERROR_T psmerr;
+    int inuse = 0;
 
     req = psm_create_req();
     req->kind = MPID_REQUEST_SEND;
@@ -415,6 +424,9 @@ int psm_1sided_getaccumpkt(MPIDI_CH3_Pkt_accum_t *pkt, MPID_IOV *iov, int iov_n,
 
         /*tag for resp packet*/
         pkt->resp_rndv_tag = psm_get_rndvtag();
+
+        /* decrease header req's ref_count, since CH3 only checks the rndv one.*/
+        MPIU_Object_release_ref(req, &inuse);
 
         /* last iov is the packet */
         buflen = 0;
@@ -684,7 +696,7 @@ int psm_1sided_getresppkt(MPIDI_CH3_Pkt_get_resp_t *pkt, MPID_IOV *iov, int iov_
     DBG("Section handles"#TP"\n");                          \
     do_##TP:                                                  
 
-int psm_1sided_input(MPID_Request *req, int inlen)
+int psm_1sided_input(MPID_Request *req, MPIDI_msg_sz_t inlen)
 {
     MPIDI_CH3_Pkt_t *pkt;
     MPID_Request *temp_req;
@@ -964,7 +976,7 @@ int psm_1sided_input(MPID_Request *req, int inlen)
 errpkt:    
     fprintf(stderr, "Unknown packet type %d\n", pkt->type);
     fprintf(stderr, "Request flags are %x\n", req->psm_flags);
-    fprintf(stderr, "Length of message was %d\n", inlen);
+    fprintf(stderr, "Length of message was %ld\n", inlen);
     fprintf(stderr, "I should not be here. Poof!\n");
     fflush(stderr);
 
@@ -983,7 +995,7 @@ end_2:
 #undef GET_VC
 
 /* a large request has completed */
-int psm_complete_rndvrecv(MPID_Request *req, int inlen)
+int psm_complete_rndvrecv(MPID_Request *req, MPIDI_msg_sz_t inlen)
 {
     /* the put pkt request was stored in tmpbuf */
     MPID_Request *putreq;
@@ -1104,7 +1116,7 @@ fn_fail:
     return mpi_errno;    
 }
 
-static MPID_Request *psm_1sc_putacc_rndvrecv(MPID_Request *putreq, int putlen, 
+static MPID_Request *psm_1sc_putacc_rndvrecv(MPID_Request *putreq, MPIDI_msg_sz_t putlen,
                      MPID_Request **nreq, void *useraddr, int rndv_tag, 
                      int source_rank, int rndv_len, MPIDI_VC_t *vc)
 {
@@ -1209,15 +1221,19 @@ fn_fail:
 
 /* if response is packed, unpack */
 
-int psm_getresp_rndv_complete(MPID_Request *req, int inlen) 
+int psm_getresp_rndv_complete(MPID_Request *req, MPIDI_msg_sz_t inlen)
 {
     if(req->psm_flags & PSM_RNDVRECV_GET_PACKED) {
         DBG("GET RDNV: did unpack\n");
         MPID_Request *savq = req->savedreq;
         psm_do_unpack(savq->dev.user_count, savq->dev.datatype, NULL, savq->dev.user_buf,
                 0, savq->dev.real_user_buf, inlen);
-        MPID_cc_set(req->savedreq->cc_ptr, 0);
         MPIU_Free(savq->dev.user_buf);
+
+        /* complete the control request and decrease ref_count,
+         * thus it can be freed in CH3. */
+        MPIDI_CH3U_Request_complete(savq);
+
         MPIU_Object_set_ref(req, 0);
         MPIDI_CH3_Request_destroy(req);
     }

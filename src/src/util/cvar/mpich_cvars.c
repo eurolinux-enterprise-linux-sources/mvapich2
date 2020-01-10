@@ -5,7 +5,7 @@
  */
 /* automatically generated
  *   by:   ./maint/extractcvars
- *   at:   Tue Mar 29 20:55:00 2016
+ *   at:   Wed Sep  7 14:34:52 2016
  *
  * DO NOT EDIT!!!
  */
@@ -299,47 +299,47 @@ int MPIR_T_cvar_init(void)
         return MPI_SUCCESS;
     initialized = TRUE;
 
-    /* declared in /tmp/vNNbTuLw3K/mvapich2-2.2rc1/maint/../src/mpi/init/finalize.c */
+    /* declared in /tmp/Zrm50x0Zk_/mvapich2-2.2/maint/../src/mpi/init/finalize.c */
     MPIR_T_cat_add_desc("DEVELOPER",
         "useful for developers working on MPICH itself");
 
-    /* declared in /tmp/vNNbTuLw3K/mvapich2-2.2rc1/maint/../src/mpi/init/init.c */
+    /* declared in /tmp/Zrm50x0Zk_/mvapich2-2.2/maint/../src/mpi/init/init.c */
     MPIR_T_cat_add_desc("THREADS",
         "multi-threading cvars");
 
-    /* declared in /tmp/vNNbTuLw3K/mvapich2-2.2rc1/maint/../src/mpi/init/initthread.c */
+    /* declared in /tmp/Zrm50x0Zk_/mvapich2-2.2/maint/../src/mpi/init/initthread.c */
     MPIR_T_cat_add_desc("DEBUGGER",
         "cvars relevant to the \"MPIR\" debugger interface");
 
-    /* declared in /tmp/vNNbTuLw3K/mvapich2-2.2rc1/maint/../src/mpi/coll/helper_fns.c */
+    /* declared in /tmp/Zrm50x0Zk_/mvapich2-2.2/maint/../src/mpi/coll/helper_fns.c */
     MPIR_T_cat_add_desc("FAULT_TOLERANCE",
         "cvars that control fault tolerance behavior");
 
-    /* declared in /tmp/vNNbTuLw3K/mvapich2-2.2rc1/maint/../src/mpi/coll/alltoall.c */
+    /* declared in /tmp/Zrm50x0Zk_/mvapich2-2.2/maint/../src/mpi/coll/alltoall.c */
     MPIR_T_cat_add_desc("COLLECTIVE",
         "A category for collective communication variables.");
 
-    /* declared in /tmp/vNNbTuLw3K/mvapich2-2.2rc1/maint/../src/mpi/errhan/errutil.c */
+    /* declared in /tmp/Zrm50x0Zk_/mvapich2-2.2/maint/../src/mpi/errhan/errutil.c */
     MPIR_T_cat_add_desc("ERROR_HANDLING",
         "cvars that control error handling behavior (stack traces, aborts, etc)");
 
-    /* declared in /tmp/vNNbTuLw3K/mvapich2-2.2rc1/maint/../src/mpi/comm/comm_split.c */
+    /* declared in /tmp/Zrm50x0Zk_/mvapich2-2.2/maint/../src/mpi/comm/comm_split.c */
     MPIR_T_cat_add_desc("COMMUNICATOR",
         "cvars that control communicator construction and operation");
 
-    /* declared in /tmp/vNNbTuLw3K/mvapich2-2.2rc1/maint/../src/nameserv/file/file_nameserv.c */
+    /* declared in /tmp/Zrm50x0Zk_/mvapich2-2.2/maint/../src/nameserv/file/file_nameserv.c */
     MPIR_T_cat_add_desc("PROCESS_MANAGER",
         "cvars that control the client-side process manager code");
 
-    /* declared in /tmp/vNNbTuLw3K/mvapich2-2.2rc1/maint/../src/util/mem/handlemem.c */
+    /* declared in /tmp/Zrm50x0Zk_/mvapich2-2.2/maint/../src/util/mem/handlemem.c */
     MPIR_T_cat_add_desc("MEMORY",
         "affects memory allocation and usage, including MPI object handles");
 
-    /* declared in /tmp/vNNbTuLw3K/mvapich2-2.2rc1/maint/../src/mpid/ch3/src/ch3u_rma_sync.c */
+    /* declared in /tmp/Zrm50x0Zk_/mvapich2-2.2/maint/../src/mpid/ch3/src/ch3u_rma_sync.c */
     MPIR_T_cat_add_desc("CH3",
         "cvars that control behavior of ch3");
 
-    /* declared in /tmp/vNNbTuLw3K/mvapich2-2.2rc1/maint/../src/mpid/ch3/channels/nemesis/src/mpid_nem_init.c */
+    /* declared in /tmp/Zrm50x0Zk_/mvapich2-2.2/maint/../src/mpid/ch3/channels/nemesis/src/mpid_nem_init.c */
     MPIR_T_cat_add_desc("NEMESIS",
         "cvars that control behavior of the ch3:nemesis channel");
 

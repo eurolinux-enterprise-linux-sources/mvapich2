@@ -14309,7 +14309,7 @@ fi
 # Build information
 # these values come from the m4_include above
 HYDRA_VERSION="3.1.4"
-HYDRA_RELEASE_DATE="Tue Mar 29 20:54:20 EDT 2016"
+HYDRA_RELEASE_DATE="Wed Sep  7 14:33:43 EDT 2016"
 if test -z "$HYDRA_VERSION" ; then
     as_fn_error $? "Version information not found. Configuration aborted." "$LINENO" 5
 fi

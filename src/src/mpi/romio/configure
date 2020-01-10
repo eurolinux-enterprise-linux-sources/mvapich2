@@ -22034,10 +22034,25 @@ if test -n "$file_system_testfs"; then
 $as_echo "#define ROMIO_TESTFS 1" >>confdefs.h
 
 fi
+
 #
 # Verify presence of lustre/lustre_user.h
 #
 if test -n "$file_system_lustre"; then
+    ac_fn_c_check_type "$LINENO" "u_int64_t" "ac_cv_type_u_int64_t" "$ac_includes_default"
+if test "x$ac_cv_type_u_int64_t" = xyes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_U_INT64_T 1
+_ACEOF
+
+
+else
+
+$as_echo "#define u_int64_t uint64_t" >>confdefs.h
+
+fi
+
     for ac_header in lustre/lustre_user.h
 do :
   ac_fn_c_check_header_mongrel "$LINENO" "lustre/lustre_user.h" "ac_cv_header_lustre_lustre_user_h" "$ac_includes_default"
@@ -22050,7 +22065,6 @@ $as_echo "#define ROMIO_LUSTRE 1" >>confdefs.h
 
 else
   as_fn_error $? "LUSTRE support requested but cannot find lustre/lustre_user.h header file" "$LINENO" 5
-
 fi
 
 done

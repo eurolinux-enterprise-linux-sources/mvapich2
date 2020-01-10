@@ -41,7 +41,11 @@ int qp_required(MPIDI_VC_t * vc, int my_rank, int dst_rank)
 {
     int qp_reqd = 1;
 
-    if ((my_rank == dst_rank) || (
+    if (g_atomics_support) {
+        /* If we support atomics, we always need to create QP to self to
+         * ensure correctness */
+        qp_reqd = 1;
+    } else if ((my_rank == dst_rank) || (
         !mv2_MPIDI_CH3I_RDMA_Process.force_ib_atomic 
         && rdma_use_smp && (vc->smp.local_rank != -1))) {
         /* Process is local */
@@ -164,21 +168,49 @@ struct ibv_srq *create_srq(struct mv2_MPIDI_CH3I_RDMA_Process_t *proc,
     return srq_ptr;
 }
 
-static int check_attrs(struct ibv_port_attr *port_attr,
+static int check_attrs(struct mv2_MPIDI_CH3I_RDMA_Process_t *proc,
+                       struct ibv_port_attr *port_attr,
                        struct ibv_device_attr *dev_attr, int user_set)
 {
     int ret = 0;
+    int user_set_rc_mtu = 0;
+#if defined(_ENABLE_UD_) || defined(_MCST_SUPPORT_)
+    int user_set_ud_mtu = 0;
+#endif /* #if defined(_ENABLE_UD_) || defined(_MCST_SUPPORT_)*/
 #ifdef _ENABLE_XRC_
     if (USE_XRC && !(dev_attr->device_cap_flags & IBV_DEVICE_XRC)) {
         fprintf(stderr, "HCA does not support XRC. Disable MV2_USE_XRC.\n");
         ret = 1;
     }
 #endif /* _ENABLE_XRC_ */
-    if (port_attr->active_mtu < rdma_default_mtu) {
-        if (!user_set) {
+    /* Set RC MTU */
+    if (rdma_default_mtu == 0) {
+        /* Set default value for MTU */
+        if (MV2_HCA_MLX_PCI_EX_DDR == proc->hca_type) {
+            rdma_default_mtu = IBV_MTU_2048;
+        } else if (MV2_HCA_MLX_CX_QDR == proc->hca_type) {
+            rdma_default_mtu = IBV_MTU_2048;
+        } else if (MV2_HCA_MLX_CX_FDR == proc->hca_type) {
+            rdma_default_mtu = IBV_MTU_2048;
+        } else if (MV2_HCA_MLX_CX_EDR == proc->hca_type) {
+            rdma_default_mtu = IBV_MTU_2048;
+        } else if (MV2_HCA_INTEL_HFI1 == proc->hca_type) {
+            rdma_default_mtu = IBV_MTU_4096;
+        } else {
+            rdma_default_mtu = IBV_MTU_1024;
+        }
+    } else {
+        user_set_rc_mtu = 1;
+    }
+    if ((port_attr->active_mtu < rdma_default_mtu)
+#ifdef _ENABLE_UD_
+        && !rdma_enable_only_ud
+#endif
+        ) {
+        if (!user_set_rc_mtu) {
             rdma_default_mtu = port_attr->active_mtu;
         } else {
-            fprintf(stderr,
+            MPIU_Usage_printf(
                     "MV2_DEFAULT_MTU is set to %s, but maximum the HCA supports is %s.\n"
                     "Please reset MV2_DEFAULT_MTU to a value <= %s\n",
                     mv2_ibv_mtu_enum_to_string(rdma_default_mtu),
@@ -187,6 +219,31 @@ static int check_attrs(struct ibv_port_attr *port_attr,
             ret = 1;
         }
     }
+#if defined(_ENABLE_UD_) || defined(_MCST_SUPPORT_)
+    /* Set UD MTU */
+    if (rdma_default_ud_mtu == 0) {
+        rdma_default_ud_mtu = MV2_DEFAULT_UD_MTU;
+    } else {
+        user_set_ud_mtu = 1;
+    }
+    int max_mtu = mv2_ibv_mtu_enum_to_value(port_attr->active_mtu);
+    if (max_mtu < rdma_default_ud_mtu
+#if defined(_ENABLE_UD_)
+        && rdma_enable_hybrid
+#endif /* #if defined(_ENABLE_UD_) */
+        ) {
+        if (!user_set_ud_mtu) {
+            rdma_default_ud_mtu = mv2_ibv_mtu_enum_to_value(port_attr->active_mtu);
+        } else {
+            MPIU_Usage_printf(
+                    "MV2_UD_MTU is set to %d, but maximum the HCA supports is %d.\n"
+                    "Please reset MV2_UD_MTU to a value <= %d\n", rdma_default_ud_mtu,
+                    mv2_ibv_mtu_enum_to_value(port_attr->active_mtu),
+                    mv2_ibv_mtu_enum_to_value(port_attr->active_mtu));
+            ret = 1;
+        }
+    }
+#endif /* #if defined(_ENABLE_UD_) || defined(_MCST_SUPPORT_) */
 
     if (dev_attr->max_qp_rd_atom < rdma_default_qp_ous_rd_atom) {
         if (!user_set) {
@@ -686,8 +743,15 @@ int rdma_iba_hca_init_noqp(struct mv2_MPIDI_CH3I_RDMA_Process_t *proc,
 
         if ((dev_attr.atomic_cap == IBV_ATOMIC_HCA) || (dev_attr.atomic_cap == IBV_ATOMIC_GLOB)) {
             g_atomics_support = 1;
-        } else {
-            g_atomics_support = 0;
+        }
+#ifdef ATOMIC_HCA_REPLY_BE
+        else if (dev_attr.atomic_cap == ATOMIC_HCA_REPLY_BE) {
+                g_atomics_support = 1;
+                g_atomics_support_be = 1;
+        }
+#endif
+        else {
+                g_atomics_support = 0;
         }
 
         /* detecting active ports */
@@ -712,7 +776,8 @@ int rdma_iba_hca_init_noqp(struct mv2_MPIDI_CH3I_RDMA_Process_t *proc,
 
                     mv2_MPIDI_CH3I_RDMA_Process.ports[i][k++] = j;
 
-                    if (check_attrs(&port_attr, &dev_attr, 1)) {
+                    if (check_attrs(proc, &port_attr, &dev_attr,
+                                    (rdma_default_port == RDMA_DEFAULT_PORT)?0:1)) {
                         MPIU_ERR_SETFATALANDJUMP1(mpi_errno,
                                                   MPI_ERR_INTERN,
                                                   "**fail",
@@ -754,7 +819,7 @@ int rdma_iba_hca_init_noqp(struct mv2_MPIDI_CH3I_RDMA_Process_t *proc,
             mv2_MPIDI_CH3I_RDMA_Process.lids[i][0] = port_attr.lid;
             mv2_MPIDI_CH3I_RDMA_Process.ports[i][0] = rdma_default_port;
 
-            if (check_attrs(&port_attr, &dev_attr, 0)) {
+            if (check_attrs(proc, &port_attr, &dev_attr, 1)) {
                 MPIU_ERR_SETFATALANDJUMP1(mpi_errno,
                                           MPI_ERR_INTERN,
                                           "**fail",
@@ -881,7 +946,14 @@ int rdma_iba_hca_init(struct mv2_MPIDI_CH3I_RDMA_Process_t *proc, int pg_rank,
 
             if ((dev_attr.atomic_cap == IBV_ATOMIC_HCA) || (dev_attr.atomic_cap == IBV_ATOMIC_GLOB)) {
                 g_atomics_support = 1;
-            } else {
+            }
+#ifdef ATOMIC_HCA_REPLY_BE
+            else if (dev_attr.atomic_cap == ATOMIC_HCA_REPLY_BE) {
+                g_atomics_support = 1;
+                g_atomics_support_be = 1;
+            }
+#endif
+            else {
                 g_atomics_support = 0;
             }
 
@@ -915,7 +987,8 @@ int rdma_iba_hca_init(struct mv2_MPIDI_CH3I_RDMA_Process_t *proc, int pg_rank,
                         ports[i][k++] = j;
 
 
-                        if (check_attrs(&port_attr, &dev_attr, 1)) {
+                        if (check_attrs(proc, &port_attr, &dev_attr,
+                                    (rdma_default_port == RDMA_DEFAULT_PORT)?0:1)) {
                             MPIU_ERR_SETFATALANDJUMP1(mpi_errno, MPI_ERR_OTHER,
                                                       "**fail", "**fail %s",
                                                       "Attributes failed sanity check");
@@ -950,7 +1023,7 @@ int rdma_iba_hca_init(struct mv2_MPIDI_CH3I_RDMA_Process_t *proc, int pg_rank,
                             pg_rank);
                 }
 
-                if (check_attrs(&port_attr, &dev_attr, 0)) {
+                if (check_attrs(proc, &port_attr, &dev_attr, 1)) {
                     MPIU_ERR_SETFATALANDJUMP1(mpi_errno, MPI_ERR_OTHER,
                             "**fail", "**fail %s",
                             "Attributes failed sanity check");
@@ -1006,6 +1079,8 @@ int rdma_iba_hca_init(struct mv2_MPIDI_CH3I_RDMA_Process_t *proc, int pg_rank,
             }
         }
 #ifdef RDMA_CM
+    } else if (proc->hca_type == MV2_HCA_MLX_CX_CONNIB) {
+        g_atomics_support = 0;
     }
 #endif /* RDMA_CM */
 
@@ -1016,6 +1091,11 @@ int rdma_iba_hca_init(struct mv2_MPIDI_CH3I_RDMA_Process_t *proc, int pg_rank,
         qp_attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE |
         IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
         IBV_ACCESS_REMOTE_ATOMIC;
+#ifdef INFINIBAND_VERBS_EXP_H
+        if (g_atomics_support_be) {
+            qp_attr.qp_access_flags |= IBV_EXP_QP_CREATE_ATOMIC_BE_REPLY;
+        }
+#endif  /* INFINIBAND_VERBS_EXP_H */
     } else {
         qp_attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE |
         IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
@@ -1050,7 +1130,7 @@ int rdma_iba_hca_init(struct mv2_MPIDI_CH3I_RDMA_Process_t *proc, int pg_rank,
         MPIU_Memset(vc->mrail.srp.credits, 0,
                     (sizeof *vc->mrail.srp.credits * vc->mrail.num_rails));
 
-        if (!qp_required(vc, pg_rank, i)) {
+        if ((i == pg_rank) || !qp_required(vc, pg_rank, i)) {
             continue;
         }
 #ifdef RDMA_CM
@@ -1116,6 +1196,11 @@ int rdma_iba_hca_init(struct mv2_MPIDI_CH3I_RDMA_Process_t *proc, int pg_rank,
                 qp_attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE |
                 IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
                 IBV_ACCESS_REMOTE_ATOMIC;
+#ifdef INFINIBAND_VERBS_EXP_H
+                if (g_atomics_support_be) {
+                    qp_attr.qp_access_flags |= IBV_EXP_QP_CREATE_ATOMIC_BE_REPLY;
+                }
+#endif  /* INFINIBAND_VERBS_EXP_H */
             } else {
                 qp_attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE |
                 IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
@@ -1349,7 +1434,7 @@ rdma_iba_enable_connections(struct mv2_MPIDI_CH3I_RDMA_Process_t *proc,
     pg_size = MPIDI_PG_Get_size(pg);
     for (i = 0; i < pg_size; i++) {
         MPIDI_PG_Get_vc(pg, i, &vc);
-        if (!qp_required(vc, pg_rank, i)) {
+        if ((i == pg_rank) || !qp_required(vc, pg_rank, i)) {
             continue;
         }
 
@@ -1432,7 +1517,7 @@ rdma_iba_enable_connections(struct mv2_MPIDI_CH3I_RDMA_Process_t *proc,
     for (i = 0; i < pg_size; i++) {
         MPIDI_PG_Get_vc(pg, i, &vc);
 
-        if (!qp_required(vc, pg_rank, i)) {
+        if ((i == pg_rank) || !qp_required(vc, pg_rank, i)) {
             continue;
         }
 
@@ -1836,6 +1921,11 @@ static inline int cm_qp_conn_create(MPIDI_VC_t * vc, int qptype)
             qp_attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE |
             IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
             IBV_ACCESS_REMOTE_ATOMIC;
+#ifdef INFINIBAND_VERBS_EXP_H
+            if (g_atomics_support_be) {
+                qp_attr.qp_access_flags |= IBV_EXP_QP_CREATE_ATOMIC_BE_REPLY;
+            }
+#endif  /* INFINIBAND_VERBS_EXP_H */
         } else {
             qp_attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE |
             IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
@@ -2297,6 +2387,7 @@ int MPIDI_CH3I_UD_Generate_addr_handle_for_rank(MPIDI_PG_t * pg, int tgt_rank)
     for (hca_index = 0; hca_index < rdma_num_hcas; hca_index++) {
         mv2_ud_set_vc_info(&vc->mrail.ud[hca_index],
                            &pg->ch.mrail->cm_shmem.remote_ud_info[tgt_rank][hca_index],
+                           pg->ch.mrail->cm_shmem.ud_cm[tgt_rank].cm_gid,
                            mv2_MPIDI_CH3I_RDMA_Process.ptag[hca_index],
                            mv2_MPIDI_CH3I_RDMA_Process.ports[hca_index][0]);
     }

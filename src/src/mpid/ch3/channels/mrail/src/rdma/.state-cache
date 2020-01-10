@@ -1,29 +1,29 @@
 <dir>
-<file name="ch3_request.c" info="1459299171"/>
-<file name="ch3_get_business_card.c" info="1459299171"/>
-<file name="ch3_cancel_send.c" info="1459299171"/>
-<file name="ch3_istartmsgv.c" info="1459299171"/>
-<file name="ch3_comm_connect.c" info="1459299171"/>
-<file name="ch3_win_fns.c" info="1459299171"/>
-<file name="ch3_istartrndvmsg.c" info="1459299171"/>
-<file name="ch3_smp_progress.c" info="1459299171"/>
-<file name="ch3_contigsend.c" info="1459299171"/>
-<file name="ch3_istartmsg.c" info="1459299171"/>
-<file name="ch3_isend.c" info="1459299171"/>
-<file name="ch3_comm_spawn.c" info="1459299171"/>
-<file name="mpid_mrail_rndv.c" info="1459299171"/>
-<file name="ch3_abort.c" info="1459299171"/>
-<file name="ch3_open_port.c" info="1459299171"/>
-<file name="ch3_rndvtransfer.c" info="1459299171"/>
-<file name="ch3_progress.c" info="1459299171"/>
-<file name="ch3_packetizedtransfer.c" info="1459299171"/>
-<file name="ch3_comm_accept.c" info="1459299171"/>
-<file name="ch3_finalize.c" info="1459299171"/>
-<file name="ch3_isendv.c" info="1459299171"/>
-<file name="ch3_init.c" info="1459299171"/>
-<file name="ch3_read_progress.c" info="1459299171"/>
-<file name="ch3i_comm.c" info="1459299171"/>
-<file name="ch3_comm_spawn_multiple.c" info="1459299171"/>
+<file name="ch3_request.c" info="1473273118"/>
+<file name="ch3_get_business_card.c" info="1473273118"/>
+<file name="ch3_cancel_send.c" info="1473273118"/>
+<file name="ch3_istartmsgv.c" info="1473273118"/>
+<file name="ch3_comm_connect.c" info="1473273118"/>
+<file name="ch3_win_fns.c" info="1473273118"/>
+<file name="ch3_istartrndvmsg.c" info="1473273118"/>
+<file name="ch3_smp_progress.c" info="1473273118"/>
+<file name="ch3_contigsend.c" info="1473273118"/>
+<file name="ch3_istartmsg.c" info="1473273118"/>
+<file name="ch3_isend.c" info="1473273118"/>
+<file name="ch3_comm_spawn.c" info="1473273118"/>
+<file name="mpid_mrail_rndv.c" info="1473273118"/>
+<file name="ch3_abort.c" info="1473273118"/>
+<file name="ch3_open_port.c" info="1473273118"/>
+<file name="ch3_rndvtransfer.c" info="1473273118"/>
+<file name="ch3_progress.c" info="1473273118"/>
+<file name="ch3_packetizedtransfer.c" info="1473273118"/>
+<file name="ch3_comm_accept.c" info="1473273118"/>
+<file name="ch3_finalize.c" info="1473273118"/>
+<file name="ch3_isendv.c" info="1473273118"/>
+<file name="ch3_init.c" info="1473273118"/>
+<file name="ch3_read_progress.c" info="1473273118"/>
+<file name="ch3i_comm.c" info="1473273118"/>
+<file name="ch3_comm_spawn_multiple.c" info="1473273118"/>
 </dir>
 <data>
 <fileinfo name="ch3_request.c">
@@ -159,7 +159,6 @@ MPID_STATE_MPIDI_CH3_SMP_ISENDV MPIDI_CH3_SMP_iSendv
 MPID_STATE_MPIDI_CH3_ISENDV MPIDI_CH3_iSendv
 </fileinfo>
 <fileinfo name="ch3_init.c">
-MPID_STATE_MPIDI_CH3I_SET_AFFINITY MPIDI_CH3I_set_affinity
 MPID_STATE_MPIDI_CH3_INIT MPIDI_CH3_Init
 MPID_STATE_MPIDI_CH3_VC_INIT MPIDI_CH3_VC_Init
 MPID_STATE_MPIDI_CH3_RDMA_PORTFNSINIT MPIDI_CH3_PortFnsInit
