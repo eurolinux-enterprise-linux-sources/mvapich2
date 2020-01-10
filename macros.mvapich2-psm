@@ -1,7 +1,0 @@
-%_mvapich2_psm_load \
- . /etc/profile.d/modules.sh; \
- module load mpi/mvapich2-psm-%{_arch}; \
- export CFLAGS="$CFLAGS %{optflags}";
-%_mvapich2_psm_unload \
- . /etc/profile.d/modules.sh; \
- module unload mpi/mvapich2-psm-%{_arch};
