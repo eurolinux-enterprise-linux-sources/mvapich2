@@ -41,9 +41,9 @@ Summary: OSU MVAPICH2 MPI package
 License: BSD
 Group: Development/Libraries
 Name: mvapich2
-Version: 1.6
-Release: 3%{?dist}
-Source: mvapich2-%{version}-r4751.tar.gz
+Version: 1.8
+Release: 1%{?dist}
+Source: mvapich2-%{version}a2.tgz
 Source1: mvapich2.module.in
 Source2: macros.mvapich2
 Source3: macros.mvapich2-psm
@@ -103,7 +103,7 @@ Contains development headers and libraries for mvapich2 using Infinipath
 
 %prep
 rm -fr %{buildroot}
-%setup -q -n %{name}-%{version}-r4751
+%setup -q -n %{name}-%{version}a2
 %ifarch x86_64
 mkdir .psm
 cp -r * .psm
@@ -118,16 +118,18 @@ cd non-psm
     --mandir=%{_mandir}/%{namearch} \
     --includedir=%{_includedir}/%{namearch} \
     --sysconfdir=%{_sysconfdir}/%{namearch} \
-    --datarootdir=%{_datadir} \
+    --datarootdir=%{_datadir}/%{name} \
+    --docdir=%{_datadir}/doc/%{name} \
     --enable-error-checking=runtime \
     --enable-timing=none \
     --enable-g=mem,dbg,meminit \
     --enable-mpe \
+    --enable-shared \
     --enable-sharedlibs=gcc \
     --with-rdma=gen2 \
     CC=%{opt_cc}    CFLAGS="%{?opt_cflags} $RPM_OPT_FLAGS $XFLAGS" \
     CXX=%{opt_cxx}  CXXFLAGS="%{?opt_cxxflags} $RPM_OPT_FLAGS $XFLAGS" \
-    F90=%{opt_fc}   F90FLAGS="%{?opt_fcflags} $RPM_OPT_FLAGS $XFLAGS" \
+    FC=%{opt_fc}    FCFLAGS="%{?opt_fcflags} $RPM_OPT_FLAGS $XFLAGS" \
     F77=%{opt_f77}  FFLAGS="%{?opt_fflags} $RPM_OPT_FLAGS $XFLAGS"
 %ifarch x86_64
 cd ..
@@ -139,16 +141,18 @@ cd psm
     --mandir=%{_mandir}/%{namepsmarch} \
     --includedir=%{_includedir}/%{namepsmarch} \
     --sysconfdir=%{_sysconfdir}/%{namepsmarch} \
-    --datarootdir=%{_datadir} \
+    --datarootdir=%{_datadir}/%{name} \
+    --docdir=%{_datadir}/doc/%{name} \
     --enable-error-checking=runtime \
     --enable-timing=none \
     --enable-g=mem,dbg,meminit \
     --enable-mpe \
+    --enable-shared \
     --enable-sharedlibs=gcc \
     --with-device=ch3:psm \
     CC=%{opt_cc}    CFLAGS="%{?opt_cflags} $RPM_OPT_FLAGS $XFLAGS" \
     CXX=%{opt_cxx}  CXXFLAGS="%{?opt_cxxflags} $RPM_OPT_FLAGS $XFLAGS" \
-    F90=%{opt_fc}   F90FLAGS="%{?opt_fcflags} $RPM_OPT_FLAGS $XFLAGS" \
+    FC=%{opt_fc}    FCFLAGS="%{?opt_fcflags} $RPM_OPT_FLAGS $XFLAGS" \
     F77=%{opt_f77}  FFLAGS="%{?opt_fflags} $RPM_OPT_FLAGS $XFLAGS"
 %endif
 %build
@@ -163,17 +167,17 @@ make
 cd non-psm
 make DESTDIR=%{buildroot} install
 # find %{buildroot}%{_mandir}/%{namearch} -type f | xargs gzip -9
-mkdir %{buildroot}%{_mandir}/%{namearch}/man{1,2,3,4,5,6,7,8,9,n}
+mkdir %{buildroot}%{_mandir}/%{namearch}/man{2,5,6,7,8,9,n}
 
 # Make the environment-modules file
 mkdir -p %{buildroot}%{_sysconfdir}/modulefiles
 # Since we're doing our own substitution here, use our own definitions.
 sed 's#@LIBDIR@#'%{_libdir}/%{name}'#g;s#@ETCDIR@#'%{_sysconfdir}/%{namearch}'#g;s#@FMODDIR@#'%{_fmoddir}/%{namearch}'#g;s#@INCDIR@#'%{_includedir}/%{namearch}'#g;s#@MANDIR@#'%{_mandir}/%{namearch}'#g;s#@PYSITEARCH@#'%{python_sitearch}/%{name}'#g;s#@COMPILER@#%{name}-'%{_arch}%{?_cc_name_suffix}'#g;s#@SUFFIX@#'%{?_cc_name_suffix}'_%{name}#g' < %SOURCE1 > %{buildroot}%{_sysconfdir}/modulefiles/%{namearch}
 # make the rpm config file
-mkdir -p %{buildroot}/%{_sysconfdir}/rpm
-cp %SOURCE2 %{buildroot}/%{_sysconfdir}/rpm/macros.%{namearch}
-mkdir -p %{buildroot}/%{_fmoddir}/%{namearch}
-mkdir -p %{buildroot}/%{python_sitearch}/%{name}%{?_cc_name_suffix}
+mkdir -p %{buildroot}%{_sysconfdir}/rpm
+cp %SOURCE2 %{buildroot}%{_sysconfdir}/rpm/macros.%{namearch}
+mkdir -p %{buildroot}%{_fmoddir}/%{namearch}
+mkdir -p %{buildroot}%{python_sitearch}/%{name}%{?_cc_name_suffix}
 rm %{buildroot}%{_libdir}/%{name}/bin/mpeuninstall
 # These are included in the mpitests rpm
 # and they are built here with a bogus rpath
@@ -182,21 +186,22 @@ rm -r %{buildroot}%{_libdir}/%{name}/libexec/osu-micro-benchmarks
 cd ../psm
 make DESTDIR=%{buildroot} install
 # find %{buildroot}%{_mandir}/%{namepsmarch} -type f | xargs gzip -9
-mkdir %{buildroot}%{_mandir}/%{namepsmarch}/man{1,2,3,4,5,6,7,8,9,n}
+mkdir %{buildroot}%{_mandir}/%{namepsmarch}/man{2,5,6,7,8,9,n}
 
 # Make the environment-modules file
 # Since we're doing our own substitution here, use our own definitions.
 sed 's#@LIBDIR@#'%{_libdir}/%{name}-psm'#g;s#@ETCDIR@#'%{_sysconfdir}/%{namepsmarch}'#g;s#@FMODDIR@#'%{_fmoddir}/%{namepsmarch}'#g;s#@INCDIR@#'%{_includedir}/%{namepsmarch}'#g;s#@MANDIR@#'%{_mandir}/%{namepsmarch}'#g;s#@PYSITEARCH@#'%{python_sitearch}/%{name}-psm'#g;s#@COMPILER@#%{name}-psm-'%{_arch}%{?_cc_name_suffix}'#g;s#@SUFFIX@#'%{?_cc_name_suffix}'_%{name}-psm#g' < %SOURCE1 > %{buildroot}%{_sysconfdir}/modulefiles/%{namepsmarch}
 # make the rpm config file
-cp %SOURCE3 %{buildroot}/%{_sysconfdir}/rpm/macros.%{namepsmarch}
-mkdir -p %{buildroot}/%{_fmoddir}/%{namepsmarch}
-mkdir -p %{buildroot}/%{python_sitearch}/%{name}-psm%{?_cc_name_suffix}
+cp %SOURCE3 %{buildroot}%{_sysconfdir}/rpm/macros.%{namepsmarch}
+mkdir -p %{buildroot}%{_fmoddir}/%{namepsmarch}
+mkdir -p %{buildroot}%{python_sitearch}/%{name}-psm%{?_cc_name_suffix}
 rm %{buildroot}%{_libdir}/%{name}-psm/bin/mpeuninstall
 # These are included in the mpitests rpm
 # and they are built here with a bogus rpath
 rm -r %{buildroot}%{_libdir}/%{name}-psm/libexec/osu-micro-benchmarks
 %endif
-rm -f %{buildroot}/%{_libdir}/%{name}*/lib/*.la
+rm -f %{buildroot}%{_libdir}/%{name}*/lib/*.la
+rm -rf %{buildroot}%{_libdir}/%{name}*/lib/trace_rlog
 
 %clean
 rm -rf %{buildroot}
@@ -218,9 +223,9 @@ rm -rf %{buildroot}
 %{_libdir}/%{name}/lib/*.so.*
 %{_libdir}/%{name}/lib/*.jar
 # %{_libdir}/%{name}/libexec/*
-# %{_mandir}/%{namearch}/man1/*
-# %{_mandir}/%{namearch}/man3/*
-# %{_mandir}/%{namearch}/man4/*
+%{_mandir}/%{namearch}/man1/*
+%{_mandir}/%{namearch}/man3/*
+%{_mandir}/%{namearch}/man4/*
 %{_sysconfdir}/modulefiles/%{namearch}
 
 
@@ -238,10 +243,8 @@ rm -rf %{buildroot}
 %defattr(-,root,root,-)
 %dir %{_datadir}/%{name}
 %dir %{_datadir}/doc/%{name}
-%dir %{_datadir}/doc/openpa
 %{_datadir}/%{name}/*
 %{_datadir}/doc/%{name}/*
-%{_datadir}/doc/openpa/*
 
 %ifarch x86_64
 %files psm
@@ -261,9 +264,9 @@ rm -rf %{buildroot}
 %{_libdir}/%{name}-psm/lib/*.so.*
 %{_libdir}/%{name}-psm/lib/*.jar
 # %{_libdir}/%{name}-psm/libexec/*
-# %{_mandir}/%{namepsmarch}/man1/*
-# %{_mandir}/%{namepsmarch}/man3/*
-# %{_mandir}/%{namepsmarch}/man4/*
+%{_mandir}/%{namepsmarch}/man1/*
+%{_mandir}/%{namepsmarch}/man3/*
+%{_mandir}/%{namepsmarch}/man4/*
 %{_sysconfdir}/modulefiles/%{namepsmarch}
 
 
@@ -279,6 +282,14 @@ rm -rf %{buildroot}
 %endif
 
 %changelog
+* Tue Feb 14 2012 Jay Fenlason <fenlason@redhat.com> 1.8-1
+- New upstream version, with man pages again.
+  This fixes the following bugs:
+  Related: rhbz739138
+  Resolves: rhbz613696
+  Resolves: rhbz625620
+  Resolves: rhbz735954
+  Resolves: rhbz782263
 * Fri Aug 19 2011 Jay Fenlason <fenlason@redhat.com> 1.6-3.el6
 - Change the requires on mvapich2-psm-devel to mvapich2-psm from mvapich2
   so that mpitests will build
