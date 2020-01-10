@@ -1,0 +1,22 @@
+Index: mvapich2-2.0a/src/mpid/ch3/channels/common/include/mv2_clock.h
+===================================================================
+--- mvapich2-2.0a.orig/src/mpid/ch3/channels/common/include/mv2_clock.h	2013-08-22 19:43:36.000000000 -0400
++++ mvapich2-2.0a/src/mpid/ch3/channels/common/include/mv2_clock.h	2014-05-20 10:38:31.690263627 -0400
+@@ -81,6 +81,17 @@
+     asm volatile ("mov %0=ar.itc" : "=r" (ret));
+     return ret;
+ }
++#elif defined(__aarch64__)
++typedef unsigned long cycles_t;
++static inline cycles_t get_cycles()
++{
++	cycles_t ret;
++
++	asm volatile ("isb" : : : "memory");
++	asm volatile ("mrs %0, cntvct_el0" : "=r" (ret));
++
++	return ret;
++}
+ 
+ #else
+ #warning get_cycles not implemented for this architecture: attempt asm/timex.h
