@@ -38,28 +38,62 @@
 
 
 Summary: OSU MVAPICH2 MPI package
-License: BSD
+License: BSD/LGPLv2.1+
 Group: Development/Libraries
 Name: mvapich2
-Version: 1.8
+Version: 2.0rc1
 Release: 1%{?dist}
-Source: mvapich2-%{version}a2.tgz
+# The -rh tarball is made by taking the upstream tarball and removing
+# license-questionable, duplicated, and generated files, then editing
+# the auto* files until it compiles.
+# find * -name .codingcheck -delete
+# find * -name .state-cache -delete
+# rm .mailmap 
+# rm osu_benchmarks/*
+# # cat << EOF > osu_benchmarks/Makefile.in
+# all:
+# 	echo osu-benchmarks are in mpitests
+# install:
+# EOF
+# rm src/mpi/romio/test/external32.c
+# rm -r src/mpid/ch3/channels/mrail/src/hwloc/*
+# rm src/mpid/ch3/channels/nemesis/netmod/scif/*.[ch]
+# rm -fr src/mpid/pamid/{cross,include,src}
+# rm -r src/pm/hydra/tools/topo/hwloc/hwloc/*
+# cp /dev/null src/mpid/pamid/Makefile.mk
+# cat << EOF > src/mpid/pamid/subconfigure.m4
+# [#] start of __file__
+# 
+# dnl _PREREQ handles the former role of mpichprereq, setup_device, etc
+# [#] expansion is: PAC_SUBCFG_PREREQ_[]PAC_SUBCFG_AUTO_SUFFIX
+# AC_DEFUN([PAC_SUBCFG_PREREQ_]PAC_SUBCFG_AUTO_SUFFIX,[
+# ])dnl end PREREQ
+# AC_DEFUN([PAC_SUBCFG_BODY_]PAC_SUBCFG_AUTO_SUFFIX,[
+# ])dnl end _BODY
+# 
+# [#] end of __file__
+# EOF
+# mkdir src/pm/hydra/tools/topo/hwloc/hwloc/config
+# touch src/pm/hydra/tools/topo/hwloc/hwloc/config/{hwloc,hwloc_check_attributes,hwloc_check_visibility,hwloc_check_vendor,hwloc_components,hwloc_pkg}.m4
+Source: %{name}-%{version}-rh.tgz
 Source1: mvapich2.module.in
 Source2: macros.mvapich2
 Source3: macros.mvapich2-psm
+Patch0: mvapich2-2.0rc1-build.patch
+Patch1: mvapich2-2.0rc1-free.patch
 URL: http://mvapich.cse.ohio-state.edu/
 Buildroot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 BuildRequires: gcc-gfortran
 BuildRequires: libibumad-devel, libibverbs-devel >= 1.1.3, librdmacm-devel
-BuildRequires: python
-BuildRequires: java
+BuildRequires: python, hwloc-devel, libibmad-devel
+BuildRequires: bison, flex
 Requires: environment-modules
 Requires: %{name}-common = %{version}-%{release}
 ExcludeArch: s390 s390x
 
 %description
 This is an MPI-2 implementation which includes all MPI-1 features.  It is
-based on MPICH2 and MVICH.
+based on MPICH and MVICH.
 
 %package	common
 Summary:	Common files for mvapich2
@@ -103,37 +137,19 @@ Contains development headers and libraries for mvapich2 using Infinipath
 
 %prep
 rm -fr %{buildroot}
-%setup -q -n %{name}-%{version}a2
+%setup -q -n %{name}-%{version}-rh
+%patch0 -p1
+%patch1 -p0
 %ifarch x86_64
 mkdir .psm
-cp -r * .psm
-%endif
+cp -pr * .psm
 mkdir .non-psm
 mv * .non-psm
 mv .non-psm non-psm
-cd non-psm
-./configure \
-    --prefix=%{_libdir}/%{name} \
-    --sbindir=%{_libdir}/%{name}/bin \
-    --mandir=%{_mandir}/%{namearch} \
-    --includedir=%{_includedir}/%{namearch} \
-    --sysconfdir=%{_sysconfdir}/%{namearch} \
-    --datarootdir=%{_datadir}/%{name} \
-    --docdir=%{_datadir}/doc/%{name} \
-    --enable-error-checking=runtime \
-    --enable-timing=none \
-    --enable-g=mem,dbg,meminit \
-    --enable-mpe \
-    --enable-shared \
-    --enable-sharedlibs=gcc \
-    --with-rdma=gen2 \
-    CC=%{opt_cc}    CFLAGS="%{?opt_cflags} $RPM_OPT_FLAGS $XFLAGS" \
-    CXX=%{opt_cxx}  CXXFLAGS="%{?opt_cxxflags} $RPM_OPT_FLAGS $XFLAGS" \
-    FC=%{opt_fc}    FCFLAGS="%{?opt_fcflags} $RPM_OPT_FLAGS $XFLAGS" \
-    F77=%{opt_f77}  FFLAGS="%{?opt_fflags} $RPM_OPT_FLAGS $XFLAGS"
-%ifarch x86_64
-cd ..
 mv .psm psm
+%endif
+
+%ifarch x86_64
 cd psm
 ./configure \
     --prefix=%{_libdir}/%{name}-psm \
@@ -149,28 +165,67 @@ cd psm
     --enable-mpe \
     --enable-shared \
     --enable-sharedlibs=gcc \
+    --with-hwloc=yes --with-hwloc-prefix=system\
     --with-device=ch3:psm \
     CC=%{opt_cc}    CFLAGS="%{?opt_cflags} $RPM_OPT_FLAGS $XFLAGS" \
     CXX=%{opt_cxx}  CXXFLAGS="%{?opt_cxxflags} $RPM_OPT_FLAGS $XFLAGS" \
     FC=%{opt_fc}    FCFLAGS="%{?opt_fcflags} $RPM_OPT_FLAGS $XFLAGS" \
     F77=%{opt_f77}  FFLAGS="%{?opt_fflags} $RPM_OPT_FLAGS $XFLAGS"
+cd ..
 %endif
-%build
-# The mvapich2 build script is not smp safe
-cd non-psm
-make
+
 %ifarch x86_64
-cd ../psm
-make
-%endif
-%install
 cd non-psm
+%endif
+./configure \
+    --prefix=%{_libdir}/%{name} \
+    --sbindir=%{_libdir}/%{name}/bin \
+    --mandir=%{_mandir}/%{namearch} \
+    --includedir=%{_includedir}/%{namearch} \
+    --sysconfdir=%{_sysconfdir}/%{namearch} \
+    --datarootdir=%{_datadir}/%{name} \
+    --docdir=%{_datadir}/doc/%{name} \
+    --enable-error-checking=runtime \
+    --enable-timing=none \
+    --enable-g=mem,dbg,meminit \
+    --enable-mpe \
+    --enable-shared \
+    --enable-sharedlibs=gcc \
+    --with-hwloc=yes --with-hwloc-prefix=system\
+    --with-rdma=gen2 \
+    CC=%{opt_cc}    CFLAGS="%{?opt_cflags} $RPM_OPT_FLAGS $XFLAGS" \
+    CXX=%{opt_cxx}  CXXFLAGS="%{?opt_cxxflags} $RPM_OPT_FLAGS $XFLAGS" \
+    FC=%{opt_fc}    FCFLAGS="%{?opt_fcflags} $RPM_OPT_FLAGS $XFLAGS" \
+    F77=%{opt_f77}  FFLAGS="%{?opt_fflags} $RPM_OPT_FLAGS $XFLAGS"
+%ifarch x86_64
+cd ..
+%endif
+
+%build
+export AR=ar
+%ifarch x86_64
+cd psm
+make %{?_smp_mflags}
+cd ..
+%endif
+%ifarch x86_64
+cd non-psm
+%endif
+make %{?_smp_mflags}
+%ifarch x86_64
+cd ..
+%endif
+
+%install
+%ifarch x86_64
+cd non-psm
+%endif
 make DESTDIR=%{buildroot} install
 # find %{buildroot}%{_mandir}/%{namearch} -type f | xargs gzip -9
-mkdir %{buildroot}%{_mandir}/%{namearch}/man{2,5,6,7,8,9,n}
+mkdir %{buildroot}%{_mandir}/%{namearch}/man{2,4,5,6,7,8,9,n}
 
 # Make the environment-modules file
-mkdir -p %{buildroot}%{_sysconfdir}/modulefiles
+mkdir -p %{buildroot}%{_sysconfdir}/modulefiles/mpi
 # Since we're doing our own substitution here, use our own definitions.
 sed 's#@LIBDIR@#'%{_libdir}/%{name}'#g;s#@ETCDIR@#'%{_sysconfdir}/%{namearch}'#g;s#@FMODDIR@#'%{_fmoddir}/%{namearch}'#g;s#@INCDIR@#'%{_includedir}/%{namearch}'#g;s#@MANDIR@#'%{_mandir}/%{namearch}'#g;s#@PYSITEARCH@#'%{python_sitearch}/%{name}'#g;s#@COMPILER@#%{name}-'%{_arch}%{?_cc_name_suffix}'#g;s#@SUFFIX@#'%{?_cc_name_suffix}'_%{name}#g' < %SOURCE1 > %{buildroot}%{_sysconfdir}/modulefiles/%{namearch}
 # make the rpm config file
@@ -178,15 +233,15 @@ mkdir -p %{buildroot}%{_sysconfdir}/rpm
 cp %SOURCE2 %{buildroot}%{_sysconfdir}/rpm/macros.%{namearch}
 mkdir -p %{buildroot}%{_fmoddir}/%{namearch}
 mkdir -p %{buildroot}%{python_sitearch}/%{name}%{?_cc_name_suffix}
-rm %{buildroot}%{_libdir}/%{name}/bin/mpeuninstall
-# These are included in the mpitests rpm
-# and they are built here with a bogus rpath
-rm -r %{buildroot}%{_libdir}/%{name}/libexec/osu-micro-benchmarks
 %ifarch x86_64
-cd ../psm
+cd ..
+%endif
+
+%ifarch x86_64
+cd psm
 make DESTDIR=%{buildroot} install
 # find %{buildroot}%{_mandir}/%{namepsmarch} -type f | xargs gzip -9
-mkdir %{buildroot}%{_mandir}/%{namepsmarch}/man{2,5,6,7,8,9,n}
+mkdir %{buildroot}%{_mandir}/%{namepsmarch}/man{2,4,5,6,7,8,9,n}
 
 # Make the environment-modules file
 # Since we're doing our own substitution here, use our own definitions.
@@ -195,13 +250,15 @@ sed 's#@LIBDIR@#'%{_libdir}/%{name}-psm'#g;s#@ETCDIR@#'%{_sysconfdir}/%{namepsma
 cp %SOURCE3 %{buildroot}%{_sysconfdir}/rpm/macros.%{namepsmarch}
 mkdir -p %{buildroot}%{_fmoddir}/%{namepsmarch}
 mkdir -p %{buildroot}%{python_sitearch}/%{name}-psm%{?_cc_name_suffix}
-rm %{buildroot}%{_libdir}/%{name}-psm/bin/mpeuninstall
-# These are included in the mpitests rpm
-# and they are built here with a bogus rpath
-rm -r %{buildroot}%{_libdir}/%{name}-psm/libexec/osu-micro-benchmarks
+cd ..
 %endif
+
 rm -f %{buildroot}%{_libdir}/%{name}*/lib/*.la
 rm -rf %{buildroot}%{_libdir}/%{name}*/lib/trace_rlog
+
+# Ensure the osu files get blown away.
+rm -rf %{buildroot}%{_libdir}/%{name}-psm/libexec
+rm -rf %{buildroot}%{_libdir}/%{name}/libexec
 
 %clean
 rm -rf %{buildroot}
@@ -209,79 +266,127 @@ rm -rf %{buildroot}
 %files
 %defattr(-,root,root,-)
 %dir %{_libdir}/%{name}
-%dir %{_sysconfdir}/%{namearch}
 %dir %{_libdir}/%{name}/bin
 %dir %{_libdir}/%{name}/lib
-%dir %{_libdir}/%{name}/libexec
 %dir %{_mandir}/%{namearch}
 %dir %{_mandir}/%{namearch}/man*
 %dir %{_fmoddir}/%{namearch}
 %dir %{python_sitearch}/%{name}
 
-%config(noreplace) %{_sysconfdir}/%{namearch}/*
-%{_libdir}/%{name}/bin/*
+%{_libdir}/%{name}/bin/hydra_nameserver
+%{_libdir}/%{name}/bin/hydra_persist
+%{_libdir}/%{name}/bin/hydra_pmi_proxy
+%{_libdir}/%{name}/bin/mpichversion
+%{_libdir}/%{name}/bin/mpiexec
+%{_libdir}/%{name}/bin/mpiexec.hydra
+%{_libdir}/%{name}/bin/mpiexec.mpirun_rsh
+%{_libdir}/%{name}/bin/mpiname
+%{_libdir}/%{name}/bin/mpirun
+%{_libdir}/%{name}/bin/mpirun_rsh
+%{_libdir}/%{name}/bin/mpispawn
+%{_libdir}/%{name}/bin/mpivars
+%{_libdir}/%{name}/bin/parkill
 %{_libdir}/%{name}/lib/*.so.*
-%{_libdir}/%{name}/lib/*.jar
-# %{_libdir}/%{name}/libexec/*
 %{_mandir}/%{namearch}/man1/*
-%{_mandir}/%{namearch}/man3/*
-%{_mandir}/%{namearch}/man4/*
 %{_sysconfdir}/modulefiles/%{namearch}
 
 
 %files devel
 %defattr(-,root,root,-)
+# % dir %{_sysconfdir}/%{namearch}
 %dir %{_includedir}/%{namearch}
-%{_includedir}/%{namearch}/*
 %{_sysconfdir}/rpm/macros.%{namearch}
-%{_libdir}/%{name}/lib/mpe_prof.o
+# % config(noreplace) %{_sysconfdir}/%{namearch}/*
+%{_includedir}/%{namearch}/*
+%{_mandir}/%{namearch}/man3/*
+%{_libdir}/%{name}/bin/mpic++
+%{_libdir}/%{name}/bin/mpicc
+%{_libdir}/%{name}/bin/mpicxx
+%{_libdir}/%{name}/bin/mpif77
+%{_libdir}/%{name}/bin/mpif90
 %{_libdir}/%{name}/lib/pkgconfig
 %{_libdir}/%{name}/lib/*.a
 %{_libdir}/%{name}/lib/*.so
 
 %files common
 %defattr(-,root,root,-)
-%dir %{_datadir}/%{name}
 %dir %{_datadir}/doc/%{name}
-%{_datadir}/%{name}/*
 %{_datadir}/doc/%{name}/*
 
 %ifarch x86_64
 %files psm
 %defattr(-,root,root,-)
 %dir %{_libdir}/%{name}-psm
-%dir %{_sysconfdir}/%{namepsmarch}
 %dir %{_libdir}/%{name}-psm/bin
 %dir %{_libdir}/%{name}-psm/lib
-%dir %{_libdir}/%{name}-psm/libexec
 %dir %{_mandir}/%{namepsmarch}
 %dir %{_mandir}/%{namepsmarch}/man*
 %dir %{_fmoddir}/%{namepsmarch}
 %dir %{python_sitearch}/%{name}-psm
 
-%config(noreplace) %{_sysconfdir}/%{namepsmarch}/*
-%{_libdir}/%{name}-psm/bin/*
+%{_libdir}/%{name}-psm/bin/hydra_nameserver
+%{_libdir}/%{name}-psm/bin/hydra_persist
+%{_libdir}/%{name}-psm/bin/hydra_pmi_proxy
+%{_libdir}/%{name}-psm/bin/mpichversion
+%{_libdir}/%{name}-psm/bin/mpiexec
+%{_libdir}/%{name}-psm/bin/mpiexec.hydra
+%{_libdir}/%{name}-psm/bin/mpiexec.mpirun_rsh
+%{_libdir}/%{name}-psm/bin/mpiname
+%{_libdir}/%{name}-psm/bin/mpirun
+%{_libdir}/%{name}-psm/bin/mpirun_rsh
+%{_libdir}/%{name}-psm/bin/mpispawn
+%{_libdir}/%{name}-psm/bin/mpivars
+%{_libdir}/%{name}-psm/bin/parkill
 %{_libdir}/%{name}-psm/lib/*.so.*
-%{_libdir}/%{name}-psm/lib/*.jar
-# %{_libdir}/%{name}-psm/libexec/*
 %{_mandir}/%{namepsmarch}/man1/*
-%{_mandir}/%{namepsmarch}/man3/*
-%{_mandir}/%{namepsmarch}/man4/*
 %{_sysconfdir}/modulefiles/%{namepsmarch}
 
 
 %files psm-devel
 %defattr(-,root,root,-)
+# % dir %{_sysconfdir}/%{namepsmarch}
 %dir %{_includedir}/%{namepsmarch}
-%{_includedir}/%{namepsmarch}/*
 %{_sysconfdir}/rpm/macros.%{namepsmarch}
-%{_libdir}/%{name}-psm/lib/mpe_prof.o
+# % config(noreplace) %{_sysconfdir}/%{namepsmarch}/*
+%{_includedir}/%{namepsmarch}/*
+%{_libdir}/%{name}-psm/bin/mpic++
+%{_libdir}/%{name}-psm/bin/mpicc
+%{_libdir}/%{name}-psm/bin/mpicxx
+%{_libdir}/%{name}-psm/bin/mpif77
+%{_libdir}/%{name}-psm/bin/mpif90
+%{_mandir}/%{namepsmarch}/man3/*
 %{_libdir}/%{name}-psm/lib/pkgconfig
 %{_libdir}/%{name}-psm/lib/*.a
 %{_libdir}/%{name}-psm/lib/*.so
 %endif
 
 %changelog
+* Mon Jun 2 2014 Jay Fenlason <fenlason@redhat.com> 2.0rc1-1
+- Upgrade to upstream 2.0rc1
+- Backport from RHEL-7 to RHEL-6
+- Include the -free patch (written by me) to prevent errors caused
+  by calling the free macro rather than the free() function.
+- Fix the build process to work on RHEL-6, with its ancient
+  auto*, libtool, etc.  This requires not rerunning autogen.sh
+- Resolves: rhbz1093454
+
+
+* Mon Sep 16 2013 Jay Fenlason <fenlason@redhat.com> 2.0a-1
+- Add Build Requires on autoconf, automake, libtool,
+  perl-Digest-MD5, hwloc-devel, and libibmad-devel.
+- remove build requires on java
+- New upstream version, edited so it can pass a license audit.
+  (RHEL7) R e s o l v e s: r h b z 1001718
+
+* Mon Aug 19 2013 Jay Fenlason <fenlason@redhat.com> 1.8-3
+- Move the module files to the (correct for RHEL-7) mpi/ directory.
+- Add MANPATH to the module files.
+
+* Wed May 30 2012 Jay Fenlason <fenlason@redhat.com> 1.8-2
+- Add BuildRequires on flex and bison
+- Add "export AR=ar" to allow builds on RHEL-7 to work.
+  Resolves: rhbz822527
+
 * Tue Feb 14 2012 Jay Fenlason <fenlason@redhat.com> 1.8-1
 - New upstream version, with man pages again.
   This fixes the following bugs:

@@ -2,8 +2,10 @@
 #
 #  mvapich2 module for use with 'environment-modules' package:
 #
+conflict		mpi
 prepend-path	        PATH  		@LIBDIR@/bin
 prepend-path	        LD_LIBRARY_PATH @LIBDIR@/lib
+prepend-path		MANPATH		@MANDIR@
 setenv 		        MPI_BIN         @LIBDIR@/bin
 setenv			MPI_SYSCONFIG	@ETCDIR@
 setenv			MPI_FORTRAN_MOD_DIR	@FMODDIR@
