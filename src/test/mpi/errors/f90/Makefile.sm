@@ -1,0 +1,11 @@
+SUBDIRS = 
+
+# A special testing target to simplify testing just the F90 code
+testing:
+	../../runtests -srcdir=$(srcdir) -tests=testlist \
+		   -mpiexec=$(bindir)/mpiexec \
+		   -xmlfile=summary.xml
+
+
+smvarSubdir_do_dependencies=no
+smvar_dependenciesDummy=yes

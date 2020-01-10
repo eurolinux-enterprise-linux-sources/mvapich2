@@ -1,0 +1,36 @@
+#! /bin/sh
+# Copyright (c) 2003-2011, The Ohio State University. All rights
+# reserved.
+#
+# This file is part of the MVAPICH2 software package developed by the
+# team members of The Ohio State University's Network-Based Computing
+# Laboratory (NBCL), headed by Professor Dhabaleswar K. (DK) Panda.
+#
+# For detailed copyright and licensing information, please refer to the
+# copyright file COPYRIGHT in the top level MVAPICH2 directory.
+
+#
+# Provide information to the top level configure about the capabilities of
+# the ch3 device.  
+#
+# Currently, this is restricted to allowing the channels to assert 
+# support for MPI_THREAD_MULTIPLE
+#
+# Get the channel from the device_args, and invoke any channel prereq
+echo "Executing mpich2prereq in $devicedir with $device_args"
+channel_name=`echo ${device_args} | sed -e 's/:.*$//'`
+if test -z "$channel_name" ; then 
+# <_OSU_MVAPICH_>
+#    channel_name=sock
+#    channel_name=mrail
+# </_OSU_MVAPICH_>
+    channel_name=nemesis
+fi
+if test -n "$channel_name" ; then
+    if test -f "$devicedir/channels/$channel_name/mpich2prereq" ; then
+        . $devicedir/channels/$channel_name/mpich2prereq
+    fi
+fi
+# Set a value for the maximum processor name.  If necessary, this script
+# should run whatever tests are needed to determine the supported value.
+MPID_MAX_PROCESSOR_NAME=128
