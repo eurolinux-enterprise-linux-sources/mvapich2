@@ -30,7 +30,7 @@
 
 Name:    mvapich2
 Version: 2.2
-Release: 1%{?dist}
+Release: 4%{?dist}
 Summary: OSU MVAPICH2 MPI package
 Group:   Development/Libraries
 # Richard Fontana wrote in https://bugzilla.redhat.com/show_bug.cgi?id=1333114:
@@ -58,6 +58,13 @@ Patch2: 0002-unbundle-osu_benchmarks.patch
 # license-questionable, duplicated, and generated files, then editing
 # the auto* files until it compiles.
 Source100:  mvapich2-2.0a-rh.tgz
+
+Source230:  http://mvapich.cse.ohio-state.edu/download/mvapich/mv2/%{name}-2.3.tar.gz
+Source231:  mvapich23.module.in
+Source232:  mvapich23.macros.in
+Patch231:   0001-mvapich23-unbundle-contrib-hwloc.patch
+Patch232:   0002-mvapich23-unbundle-osu_benchmarks.patch
+
 BuildRequires: gcc-gfortran
 BuildRequires: libibumad-devel, libibverbs-devel >= 1.1.3, librdmacm-devel
 BuildRequires: python, perl-Digest-MD5, hwloc-devel, libibmad-devel
@@ -156,7 +163,7 @@ Contains development headers and libraries for mvapich2-2.2-psm2.
 
 %package 2.0
 Version:   2.0a
-Release:   6.1%{?dist}
+Release:   9%{?dist}
 Summary:   OSU MVAPICH2 MPI package
 Group:     Development/Libraries
 Obsoletes: mvapich2 < 2.0a-4
@@ -228,8 +235,99 @@ Requires:  gcc-gfortran
 Contains development headers and libraries for mvapich2-2.0-psm.
 %endif
 
+%package -n mvapich23
+Summary:   OSU MVAPICH2 MPI package 2.3
+Group:     Development/Libraries
+Version:   2.3
+Release:   4%{?dist}
+Provides:  mpi
+Requires:  environment-modules
+
+%description -n mvapich23
+%{common_desc}
+
+%package -n mvapich23-devel
+Version:   %{version}
+Release:   %{release}
+Summary:   Development files for mvapich23
+Group:     Development/Libraries
+Provides:  mpi-devel
+Requires:  librdmacm-devel, libibverbs-devel, libibumad-devel
+Requires:  mvapich23%{?_isa} = %{version}-%{release}
+Requires:  gcc-gfortran
+
+%description -n mvapich23-devel
+Contains development headers and libraries for mvapich23.
+
+%package -n mvapich23-doc
+Version:   %{version}
+Release:   %{release}
+Summary:   Documentation files for mvapich23
+Group:     Documentation
+BuildArch: noarch
+
+%description -n mvapich23-doc
+Additional documentation for mvapich23.
+
+%ifarch x86_64
+%package -n mvapich23-psm
+Version:   %{version}
+Release:   %{release}
+Summary:   OSU MVAPICH2 MPI package 2.3 for TrueScale adapters
+Group:     Development/Libraries
+Provides:  mpi
+Requires:  environment-modules
+
+%description -n mvapich23-psm
+%{common_desc}
+
+This is a version of mvapich2 2.3 that uses the PSM transport for TrueScale
+adapters.
+
+%package -n mvapich23-psm-devel
+Version:   %{version}
+Release:   %{release}
+Summary:   Development files for mvapich23-psm
+Group:     Development/Libraries
+Provides:  mpi-devel
+Requires:  librdmacm-devel, libibverbs-devel, libibumad-devel
+Requires:  mvapich23-psm%{?_isa} = %{version}-%{release}
+Requires:  gcc-gfortran
+
+%description -n mvapich23-psm-devel
+Contains development headers and libraries for mvapich23-psm.
+
+%package -n mvapich23-psm2
+Version:   %{version}
+Release:   %{release}
+Summary:   OSU MVAPICH2 MPI package 2.3 for Omni-Path adapters
+Group:     Development/Libraries
+Provides:  mpi
+Requires:  environment-modules
+
+%description -n mvapich23-psm2
+%{common_desc}
+
+This is a version of mvapich2 2.3 that uses the PSM2 transport for Omni-Path
+adapters.
+
+%package -n mvapich23-psm2-devel
+Version:   %{version}
+Release:   %{release}
+Summary:   Development files for mvapich23-psm2
+Group:     Development/Libraries
+Provides:  mpi-devel
+Requires:  librdmacm-devel, libibverbs-devel, libibumad-devel
+Requires:  mvapich23-psm2%{?_isa} = %{version}-%{release}
+Requires:  gcc-gfortran
+
+%description -n mvapich23-psm2-devel
+Contains development headers and libraries for mvapich23-psm2.
+
+%endif
+
 %prep
-%setup -q -b 100
+%setup -q -b 100 -b 230
 cd ..
 
 cd mvapich2-2.2
@@ -271,9 +369,149 @@ mv .default default
 cp -pr default psm
 %endif
 
+cd ..
+
+cd mvapich2-2.3
+%patch231 -p1
+%patch232 -p1
+# bundled hwloc, knem kernel module
+rm -r contrib/
+# limic kernel module
+rm -r limic2-0.5.6/
+# bundled OSU benchmarks
+rm -r osu_benchmarks/
+
+# Remove rpath, part 1
+find . -name configure -exec \
+    sed -i -r 's/(hardcode_into_libs)=.*$/\1=no/' '{}' ';'
+
+mkdir .default
+mv * .default
+mv .default default
+
+%ifarch x86_64
+cp -pr default psm
+cp -pr default psm2
+%endif
+
+cd ..
+
 %build
 cd ..
 export AR=ar
+
+########### 2.3 ###########
+cd mvapich2-2.3
+
+%ifarch x86_64
+%global variant mvapich23-psm
+%global libname %{variant}
+%global namearch %{variant}-%{_arch}
+
+cd psm
+# Fool ./configure into not seeing psm2.h
+ac_cv_header_psm2_h=no \
+./configure \
+    --prefix=%{_libdir}/%{libname} \
+    --sbindir=%{_libdir}/%{libname}/bin \
+    --mandir=%{_mandir}/%{namearch} \
+    --includedir=%{_includedir}/%{namearch} \
+    --sysconfdir=%{_sysconfdir}/%{namearch} \
+    --datarootdir=%{_datadir}/%{libname} \
+    --docdir=%{_docdir}/mvapich23 \
+    --enable-error-checking=runtime \
+    --enable-timing=none \
+    --enable-g=mem,dbg,meminit \
+    --enable-shared \
+    --enable-wrapper-rpath=no \
+    --enable-static \
+    --disable-silent-rules \
+    --with-hwloc-prefix=system \
+    --with-pic=yes \
+    --with-device=ch3:psm \
+    CC=%{opt_cc}    CFLAGS="%{?opt_cflags} $RPM_OPT_FLAGS $XFLAGS" \
+    CXX=%{opt_cxx}  CXXFLAGS="%{?opt_cxxflags} $RPM_OPT_FLAGS $XFLAGS" \
+    FC=%{opt_fc}    FCFLAGS="%{?opt_fcflags} $RPM_OPT_FLAGS $XFLAGS" \
+    F77=%{opt_f77}  FFLAGS="%{?opt_fflags} $RPM_OPT_FLAGS $XFLAGS"
+
+# Remove rpath, part 2
+find . -name libtool -exec \
+    sed -i 's|^hardcode_libdir_flag_spec=.*|hardcode_libdir_flag_spec=""|g;
+            s|^runpath_var=LD_RUN_PATH|runpath_var=DIE_RPATH_DIE|g' '{}' ';'
+make %{?_smp_mflags}
+cd ..
+
+%global variant mvapich23-psm2
+%global libname %{variant}
+%global namearch %{variant}-%{_arch}
+
+cd psm2
+./configure \
+    --prefix=%{_libdir}/%{libname} \
+    --sbindir=%{_libdir}/%{libname}/bin \
+    --mandir=%{_mandir}/%{namearch} \
+    --includedir=%{_includedir}/%{namearch} \
+    --sysconfdir=%{_sysconfdir}/%{namearch} \
+    --datarootdir=%{_datadir}/%{libname} \
+    --docdir=%{_docdir}/mvapich23 \
+    --enable-error-checking=runtime \
+    --enable-timing=none \
+    --enable-g=mem,dbg,meminit \
+    --enable-shared \
+    --enable-wrapper-rpath=no \
+    --enable-static \
+    --disable-silent-rules \
+    --with-hwloc-prefix=system \
+    --with-pic=yes \
+    --with-device=ch3:psm \
+    CC=%{opt_cc}    CFLAGS="%{?opt_cflags} $RPM_OPT_FLAGS $XFLAGS" \
+    CXX=%{opt_cxx}  CXXFLAGS="%{?opt_cxxflags} $RPM_OPT_FLAGS $XFLAGS" \
+    FC=%{opt_fc}    FCFLAGS="%{?opt_fcflags} $RPM_OPT_FLAGS $XFLAGS" \
+    F77=%{opt_f77}  FFLAGS="%{?opt_fflags} $RPM_OPT_FLAGS $XFLAGS"
+
+# Remove rpath, part 2
+find . -name libtool -exec \
+    sed -i 's|^hardcode_libdir_flag_spec=.*|hardcode_libdir_flag_spec=""|g;
+            s|^runpath_var=LD_RUN_PATH|runpath_var=DIE_RPATH_DIE|g' '{}' ';'
+make %{?_smp_mflags}
+cd ..
+%endif
+
+%global variant mvapich23
+%global libname %{variant}
+%global namearch %{variant}-%{_arch}
+
+cd default
+./configure \
+    --prefix=%{_libdir}/%{libname} \
+    --sbindir=%{_libdir}/%{libname}/bin \
+    --mandir=%{_mandir}/%{namearch} \
+    --includedir=%{_includedir}/%{namearch} \
+    --sysconfdir=%{_sysconfdir}/%{namearch} \
+    --datarootdir=%{_datadir}/%{libname} \
+    --docdir=%{_docdir}/mvapich23 \
+    --enable-error-checking=runtime \
+    --enable-timing=none \
+    --enable-g=mem,dbg,meminit \
+    --enable-shared \
+    --enable-wrapper-rpath=no \
+    --enable-static \
+    --disable-silent-rules \
+    --with-hwloc-prefix=system \
+    --with-pic=yes \
+    CC=%{opt_cc}    CFLAGS="%{?opt_cflags} $RPM_OPT_FLAGS $XFLAGS" \
+    CXX=%{opt_cxx}  CXXFLAGS="%{?opt_cxxflags} $RPM_OPT_FLAGS $XFLAGS" \
+    FC=%{opt_fc}    FCFLAGS="%{?opt_fcflags} $RPM_OPT_FLAGS $XFLAGS" \
+    F77=%{opt_f77}  FFLAGS="%{?opt_fflags} $RPM_OPT_FLAGS $XFLAGS"
+
+# Remove rpath, part 2
+find . -name libtool -exec \
+    sed -i 's|^hardcode_libdir_flag_spec=.*|hardcode_libdir_flag_spec=""|g;
+            s|^runpath_var=LD_RUN_PATH|runpath_var=DIE_RPATH_DIE|g' '{}' ';'
+make %{?_smp_mflags}
+cd ..
+
+cd ..
 
 ########### 2.2 ###########
 cd mvapich2-2.2
@@ -303,6 +541,7 @@ ac_cv_header_psm2_h=no \
     --enable-static \
     --disable-silent-rules \
     --with-hwloc-prefix=system \
+    --with-pic=yes \
     --with-device=ch3:psm \
     CC=%{opt_cc}    CFLAGS="%{?opt_cflags} $RPM_OPT_FLAGS $XFLAGS" \
     CXX=%{opt_cxx}  CXXFLAGS="%{?opt_cxxflags} $RPM_OPT_FLAGS $XFLAGS" \
@@ -337,6 +576,7 @@ cd psm2
     --enable-static \
     --disable-silent-rules \
     --with-hwloc-prefix=system \
+    --with-pic=yes \
     --with-device=ch3:psm \
     CC=%{opt_cc}    CFLAGS="%{?opt_cflags} $RPM_OPT_FLAGS $XFLAGS" \
     CXX=%{opt_cxx}  CXXFLAGS="%{?opt_cxxflags} $RPM_OPT_FLAGS $XFLAGS" \
@@ -372,6 +612,7 @@ cd default
     --enable-static \
     --disable-silent-rules \
     --with-hwloc-prefix=system \
+    --with-pic=yes \
     CC=%{opt_cc}    CFLAGS="%{?opt_cflags} $RPM_OPT_FLAGS $XFLAGS" \
     CXX=%{opt_cxx}  CXXFLAGS="%{?opt_cxxflags} $RPM_OPT_FLAGS $XFLAGS" \
     FC=%{opt_fc}    FCFLAGS="%{?opt_fcflags} $RPM_OPT_FLAGS $XFLAGS" \
@@ -411,6 +652,7 @@ cd psm
     --enable-shared \
     --enable-sharedlibs=gcc \
     --disable-silent-rules \
+    --with-pic=yes \
     --with-device=ch3:psm \
     CC=%{opt_cc}    CFLAGS="%{?opt_cflags} $RPM_OPT_FLAGS $XFLAGS" \
     CXX=%{opt_cxx}  CXXFLAGS="%{?opt_cxxflags} $RPM_OPT_FLAGS $XFLAGS" \
@@ -442,6 +684,7 @@ cd default
     --enable-sharedlibs=gcc \
     --disable-silent-rules \
     --with-rdma=gen2 \
+    --with-pic=yes \
     CC=%{opt_cc}    CFLAGS="%{?opt_cflags} $RPM_OPT_FLAGS $XFLAGS" \
     CXX=%{opt_cxx}  CXXFLAGS="%{?opt_cxxflags} $RPM_OPT_FLAGS $XFLAGS" \
     FC=%{opt_fc}    FCFLAGS="%{?opt_fcflags} $RPM_OPT_FLAGS $XFLAGS" \
@@ -457,23 +700,27 @@ finish_install() {
 	local LIBNAME="$VARIANT"
 	local NAMEARCH="$VARIANT-%{_arch}"
 
+	local MODULE_TEMPLATE="$2"
+	local MACROS_TEMPLATE="$3"
+	local FORTRAN_SUBDIR_SUFFIX="$4"
+
 	find %{buildroot}%{_libdir}/$LIBNAME/lib -name \*.la -delete
 
 	mkdir -p %{buildroot}%{_mandir}/$NAMEARCH/man{2,4,5,6,7,8,9,n}
-	mkdir -p %{buildroot}/%{_fmoddir}/$NAMEARCH
+	mkdir -p %{buildroot}/%{_fmoddir}/$LIBNAME$FORTRAN_SUBDIR_SUFFIX
 	mkdir -p %{buildroot}/%{python_sitearch}/$LIBNAME
 
 	# Make the environment-modules file
 	mkdir -p %{buildroot}%{_sysconfdir}/modulefiles/mpi
 	sed "s#@LIBDIR@#%{_libdir}/$LIBNAME#g;
 	     s#@ETCDIR@#%{_sysconfdir}/$NAMEARCH#g;
-	     s#@FMODDIR@#%{_fmoddir}/$NAMEARCH#g;
+	     s#@FMODDIR@#%{_fmoddir}/$LIBNAME$FORTRAN_SUBDIR_SUFFIX#g;
 	     s#@INCDIR@#%{_includedir}/$NAMEARCH#g;
 	     s#@MANDIR@#%{_mandir}/$NAMEARCH#g;
 	     s#@PYSITEARCH@#%{python_sitearch}/$LIBNAME#g;
 	     s#@COMPILER@#$NAMEARCH#g;
 	     s#@SUFFIX@#_$VARIANT#g" \
-		< %SOURCE1 \
+		< $MODULE_TEMPLATE \
 		> %{buildroot}%{_sysconfdir}/modulefiles/mpi/$NAMEARCH
 
 	# make the rpm config file
@@ -481,10 +728,34 @@ finish_install() {
 	# do not expand _arch
 	sed "s#@MACRONAME@#${LIBNAME//[-.]/_}#g;
 	     s#@MODULENAME@#$NAMEARCH#" \
-		< %SOURCE2 \
+		< $MACROS_TEMPLATE \
 		> %{buildroot}/%{_sysconfdir}/rpm/macros.$NAMEARCH
 }
 
+########### 2.3 ###########
+cd mvapich2-2.3
+
+# 'make install' fails to mkdir docdir by itself before installing index.html
+mkdir -p %{buildroot}%{_docdir}/mvapich23
+
+%ifarch x86_64
+cd psm
+%make_install
+finish_install mvapich23-psm %SOURCE231 %SOURCE232 ""
+cd ..
+
+cd psm2
+%make_install
+finish_install mvapich23-psm2 %SOURCE231 %SOURCE232 ""
+cd ..
+%endif
+
+cd default
+%make_install
+finish_install mvapich23 %SOURCE231 %SOURCE232 ""
+cd ..
+
+cd ..
 ########### 2.2 ###########
 cd mvapich2-2.2
 
@@ -494,18 +765,18 @@ mkdir -p %{buildroot}%{_docdir}/mvapich2-2.2
 %ifarch x86_64
 cd psm
 %make_install
-finish_install mvapich2-2.2-psm
+finish_install mvapich2-2.2-psm %SOURCE1 %SOURCE2 "-%{_arch}"
 cd ..
 
 cd psm2
 %make_install
-finish_install mvapich2-2.2-psm2
+finish_install mvapich2-2.2-psm2 %SOURCE1 %SOURCE2 "-%{_arch}"
 cd ..
 %endif
 
 cd default
 %make_install
-finish_install mvapich2-2.2
+finish_install mvapich2-2.2 %SOURCE1 %SOURCE2 "-%{_arch}"
 cd ..
 
 cd ..
@@ -515,13 +786,13 @@ cd mvapich2-2.0a
 %ifarch x86_64
 cd psm
 %make_install
-finish_install mvapich2-psm
+finish_install mvapich2-psm %SOURCE1 %SOURCE2 "-%{_arch}"
 cd ..
 %endif
 
 cd default
 %make_install
-finish_install mvapich2
+finish_install mvapich2 %SOURCE1 %SOURCE2 "-%{_arch}"
 cd ..
 
 rm -rf %{buildroot}%{_libdir}/%{name}*/lib/trace_rlog
@@ -530,6 +801,153 @@ ln -s mvapich2-%{_arch} %{buildroot}%{_sysconfdir}/mvapich2-2.0-%{_arch}
 %ifarch x86_64
 ln -s mvapich2-psm-%{_arch} %{buildroot}%{_sysconfdir}/modulefiles/mpi/mvapich2-2.0-psm-%{_arch}
 ln -s mvapich2-psm-%{_arch} %{buildroot}%{_sysconfdir}/mvapich2-2.0-psm-%{_arch}
+%endif
+
+%global variant mvapich23
+%global libname %{variant}
+%global namearch %{variant}-%{_arch}
+
+%files -n mvapich23
+%dir %{_libdir}/%{libname}
+%dir %{_libdir}/%{libname}/bin
+%dir %{_libdir}/%{libname}/lib
+%dir %{_mandir}/%{namearch}
+%dir %{_mandir}/%{namearch}/man*
+%dir %{_fmoddir}/%{libname}
+%dir %{python_sitearch}/%{libname}
+
+%{_libdir}/%{libname}/bin/hydra_nameserver
+%{_libdir}/%{libname}/bin/hydra_persist
+%{_libdir}/%{libname}/bin/hydra_pmi_proxy
+%{_libdir}/%{libname}/bin/mpichversion
+%{_libdir}/%{libname}/bin/mpiexec
+%{_libdir}/%{libname}/bin/mpiexec.hydra
+%{_libdir}/%{libname}/bin/mpiexec.mpirun_rsh
+%{_libdir}/%{libname}/bin/mpiname
+%{_libdir}/%{libname}/bin/mpirun
+%{_libdir}/%{libname}/bin/mpirun_rsh
+%{_libdir}/%{libname}/bin/mpispawn
+%{_libdir}/%{libname}/bin/mpivars
+%{_libdir}/%{libname}/bin/parkill
+%{_libdir}/%{libname}/lib/*.so.*
+%{_mandir}/%{namearch}/man1/hydra_*
+%{_mandir}/%{namearch}/man1/mpiexec.*
+%{_sysconfdir}/modulefiles/mpi/%{namearch}
+
+%files -n mvapich23-devel
+%dir %{_includedir}/%{namearch}
+%{_sysconfdir}/rpm/macros.%{namearch}
+%{_includedir}/%{namearch}/*
+%{_libdir}/%{libname}/bin/mpic++
+%{_libdir}/%{libname}/bin/mpicc
+%{_libdir}/%{libname}/bin/mpicxx
+%{_libdir}/%{libname}/bin/mpif77
+%{_libdir}/%{libname}/bin/mpif90
+%{_libdir}/%{libname}/bin/mpifort
+%{_libdir}/%{libname}/lib/pkgconfig
+%{_libdir}/%{libname}/lib/*.a
+%{_libdir}/%{libname}/lib/*.so
+%{_mandir}/%{namearch}/man1/mpi[cf]*
+%{_mandir}/%{namearch}/man3/*
+
+%files -n mvapich23-doc
+%{_docdir}/mvapich23
+
+%ifarch x86_64
+
+%global variant mvapich23-psm
+%global libname %{variant}
+%global namearch %{variant}-%{_arch}
+
+%files -n mvapich23-psm
+%dir %{_libdir}/%{libname}
+%dir %{_libdir}/%{libname}/bin
+%dir %{_libdir}/%{libname}/lib
+%dir %{_mandir}/%{namearch}
+%dir %{_mandir}/%{namearch}/man*
+%dir %{_fmoddir}/%{libname}
+%dir %{python_sitearch}/%{libname}
+
+%{_libdir}/%{libname}/bin/hydra_nameserver
+%{_libdir}/%{libname}/bin/hydra_persist
+%{_libdir}/%{libname}/bin/hydra_pmi_proxy
+%{_libdir}/%{libname}/bin/mpichversion
+%{_libdir}/%{libname}/bin/mpiexec
+%{_libdir}/%{libname}/bin/mpiexec.hydra
+%{_libdir}/%{libname}/bin/mpiexec.mpirun_rsh
+%{_libdir}/%{libname}/bin/mpiname
+%{_libdir}/%{libname}/bin/mpirun
+%{_libdir}/%{libname}/bin/mpirun_rsh
+%{_libdir}/%{libname}/bin/mpispawn
+%{_libdir}/%{libname}/bin/mpivars
+%{_libdir}/%{libname}/bin/parkill
+%{_libdir}/%{libname}/lib/*.so.*
+%{_mandir}/%{namearch}/man1/hydra_*
+%{_mandir}/%{namearch}/man1/mpiexec.*
+%{_sysconfdir}/modulefiles/mpi/%{namearch}
+
+%files -n mvapich23-psm-devel
+%dir %{_includedir}/%{namearch}
+%{_sysconfdir}/rpm/macros.%{namearch}
+%{_includedir}/%{namearch}/*
+%{_libdir}/%{libname}/bin/mpic++
+%{_libdir}/%{libname}/bin/mpicc
+%{_libdir}/%{libname}/bin/mpicxx
+%{_libdir}/%{libname}/bin/mpif77
+%{_libdir}/%{libname}/bin/mpif90
+%{_libdir}/%{libname}/bin/mpifort
+%{_libdir}/%{libname}/lib/pkgconfig
+%{_libdir}/%{libname}/lib/*.a
+%{_libdir}/%{libname}/lib/*.so
+%{_mandir}/%{namearch}/man1/mpi[cf]*
+%{_mandir}/%{namearch}/man3/*
+
+%global variant mvapich23-psm2
+%global libname %{variant}
+%global namearch %{variant}-%{_arch}
+
+%files -n mvapich23-psm2
+%dir %{_libdir}/%{libname}
+%dir %{_libdir}/%{libname}/bin
+%dir %{_libdir}/%{libname}/lib
+%dir %{_mandir}/%{namearch}
+%dir %{_mandir}/%{namearch}/man*
+%dir %{_fmoddir}/%{libname}
+%dir %{python_sitearch}/%{libname}
+
+%{_libdir}/%{libname}/bin/hydra_nameserver
+%{_libdir}/%{libname}/bin/hydra_persist
+%{_libdir}/%{libname}/bin/hydra_pmi_proxy
+%{_libdir}/%{libname}/bin/mpichversion
+%{_libdir}/%{libname}/bin/mpiexec
+%{_libdir}/%{libname}/bin/mpiexec.hydra
+%{_libdir}/%{libname}/bin/mpiexec.mpirun_rsh
+%{_libdir}/%{libname}/bin/mpiname
+%{_libdir}/%{libname}/bin/mpirun
+%{_libdir}/%{libname}/bin/mpirun_rsh
+%{_libdir}/%{libname}/bin/mpispawn
+%{_libdir}/%{libname}/bin/mpivars
+%{_libdir}/%{libname}/bin/parkill
+%{_libdir}/%{libname}/lib/*.so.*
+%{_mandir}/%{namearch}/man1/hydra_*
+%{_mandir}/%{namearch}/man1/mpiexec.*
+%{_sysconfdir}/modulefiles/mpi/%{namearch}
+
+%files -n mvapich23-psm2-devel
+%dir %{_includedir}/%{namearch}
+%{_sysconfdir}/rpm/macros.%{namearch}
+%{_includedir}/%{namearch}/*
+%{_libdir}/%{libname}/bin/mpic++
+%{_libdir}/%{libname}/bin/mpicc
+%{_libdir}/%{libname}/bin/mpicxx
+%{_libdir}/%{libname}/bin/mpif77
+%{_libdir}/%{libname}/bin/mpif90
+%{_libdir}/%{libname}/bin/mpifort
+%{_libdir}/%{libname}/lib/pkgconfig
+%{_libdir}/%{libname}/lib/*.a
+%{_libdir}/%{libname}/lib/*.so
+%{_mandir}/%{namearch}/man1/mpi[cf]*
+%{_mandir}/%{namearch}/man3/*
 %endif
 
 %global variant mvapich2-2.2
@@ -780,6 +1198,39 @@ ln -s mvapich2-psm-%{_arch} %{buildroot}%{_sysconfdir}/mvapich2-2.0-psm-%{_arch}
 %endif
 
 %changelog
+* Thu Sep 06 2018 Jarod Wilson <jarod@redhat.com> - 2.2-4
+- Use only --with-pic=yes, see if that's the magic
+- Related: #1625672
+
+* Wed Sep 05 2018 Jarod Wilson <jarod@redhat.com> - 2.2-3
+- Use ./configure --with-pic for even more PIC fixes
+- Related: #1625672
+
+* Wed Sep 05 2018 Jarod Wilson <jarod@redhat.com> - 2.2-2
+- Add further -fPIC fixes
+- Related: #1625672
+
+* Tue Sep 04 2018 Jarod Wilson <jarod@redhat.com> - 2.2-1.5
+- Update mvapich23 (TrueScale) bits to 2.3 release
+- Fix libmpi.a being built w/o -fPIC
+- Resolves: #1625672
+
+* Wed Jun 13 2018 Jarod Wilson <jarod@redhat.com> - 2.2-1.4
+- Update mvapich23 (TrueScale) bits to 2.3rc2
+- Resolves: #1483565
+
+* Thu Jan 18 2018 Michal Schmidt <mschmidt@redhat.com> - 2.2-1.3
+- Rebuild in buildroot with updated RDMA stack.
+- Related: #1452830
+
+* Wed Jan 17 2018 Michal Schmidt <mschmidt@redhat.com> - 2.2-1.2
+- Add a 2.3b build variant for TrueScale: mvapich23-psm.
+- Resolves: #1452830
+
+* Fri Nov 3 2017 Michal Schmidt <mschmidt@redhat.com> - 2.2-1.1
+- Add mvapich2 2.3b as mvapich23 and mvapich23-psm2.
+- Resolves: #1452830
+
 * Mon Mar 27 2017 Michal Schmidt <mschmidt@redhat.com> - 2.2-1
 - Update to 2.2 GA.
 - Related: #1426359
